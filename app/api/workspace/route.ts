@@ -14,7 +14,8 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   if (!env.DB) return NextResponse.json({ error: 'Armazenamento indisponível.' }, { status: 503 });
   const data = await request.json() as Data;
-  if (!Array.isArray(data.tasks) || !Array.isArray(data.projects) || !Array.isArray(data.notes)) {
+  if (!Array.isArray(data.tasks) || !Array.isArray(data.projects) || !Array.isArray(data.notes) ||
+    !Array.isArray(data.leads) || !Array.isArray(data.clients) || !Array.isArray(data.memories) || !Array.isArray(data.activities)) {
     return NextResponse.json({ error: 'Dados inválidos.' }, { status: 400 });
   }
   const user = await currentUser(request);

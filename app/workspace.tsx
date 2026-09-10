@@ -5,7 +5,7 @@ import {
   ArrowUpRight, CalendarDays, CheckSquare, ChevronDown, ChevronRight,
   CircleCheck, CircleDashed, CircleHelp, CircleX, Clock3, Command,
   FileText, Folder, LayoutDashboard, MessageCircle, Plus, Search,
-  Send, Settings, TriangleAlert, User, LogOut,
+  Send, Settings, TriangleAlert, User, LogOut, ContactRound, Building2, Brain,
 } from 'lucide-react';
 import {
   SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarFooter,
@@ -20,16 +20,20 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
-import { emptyData, statusLabels, statuses, type Data, type Note, type Project, type Task } from '@/lib/model';
+import { emptyData, normalizeData, statusLabels, statuses, type Activity, type Client, type Data, type Note, type Project, type Task } from '@/lib/model';
 import type { AuthUser } from '@/lib/auth';
+import { ClientsView, CommandPalette, CRMView, KnowledgeView, OperationsStrip, SearchView } from '@/components/os/business-modules';
 
 const asset = '/assets/';
 const nav = [
   { label: 'Visão geral', icon: LayoutDashboard },
+  { label: 'CRM', icon: ContactRound },
+  { label: 'Clientes', icon: Building2 },
   { label: 'Tarefas', icon: CheckSquare },
   { label: 'Projetos', icon: Folder },
   { label: 'Calendário', icon: CalendarDays },
   { label: 'Arquivos', icon: FileText },
+  { label: 'Conhecimento', icon: Brain },
 ];
 
 export function Status({ value }: { value: string }) {
@@ -49,6 +53,8 @@ export default function Workspace({ user }: { user: AuthUser }) {
   const [saveState, setSaveState] = useState('Carregando…');
   const [taskDialog, setTaskDialog] = useState(false);
   const [projectDialog, setProjectDialog] = useState(false);
+  const [projectClient, setProjectClient] = useState('');
+  const [commandOpen, setCommandOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [selectedNote, setSelectedNote] = useState('');
   const [noteDraft, setNoteDraft] = useState('');
@@ -57,12 +63,20 @@ export default function Workspace({ user }: { user: AuthUser }) {
   useEffect(() => { dataRef.current = data; }, [data]);
 
   useEffect(() => {
+    function shortcut(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setCommandOpen(true); }
+    }
+    window.addEventListener('keydown', shortcut);
+    return () => window.removeEventListener('keydown', shortcut);
+  }, []);
+
+  useEffect(() => {
     fetch('/api/workspace').then(async r => {
       if (r.status === 401) { window.location.reload(); throw new Error('Sessão encerrada'); }
       if (!r.ok) throw new Error('Falha ao carregar');
       return r.json();
     }).then(result => {
-      const initial = result.data || emptyData;
+      const initial = normalizeData(result.data);
       setData(initial);
       setSelectedNote(initial.notes[0]?.id || '');
       setNoteDraft(initial.notes[0]?.content || '');
@@ -97,7 +111,8 @@ export default function Workspace({ user }: { user: AuthUser }) {
         const current = dataRef.current;
         if (!current.projects.length) throw new Error('Crie um projeto antes da primeira tarefa.');
         const task: Task = { id: crypto.randomUUID(), title: value.title.trim(), description: value.description?.trim() || '', project: current.projects[0].id, status: 'Pending', priority: value.priority || 'Média', due: value.due || new Date().toISOString().slice(0, 10), created: new Date().toISOString().slice(0, 10) };
-        const next = { ...current, tasks: [task, ...current.tasks] };
+        const log: Activity = { id: crypto.randomUUID(), type: 'task.created', entityType: 'task', entityId: task.id, description: `Tarefa “${task.title}” criada.`, created: new Date().toISOString() };
+        const next = { ...current, tasks: [task, ...current.tasks], activities: [log, ...current.activities] };
         dataRef.current = next; setData(next); setSaveState('Salvando…');
         const response = await fetch('/api/workspace', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(next) });
         setSaveState(response.ok ? 'Tudo salvo' : 'Não foi possível salvar');
@@ -125,6 +140,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
   const openCount = data.tasks.length - done;
 
   function navigate(label: string) { setView(label); }
+  function openProject(clientId = '') { setProjectClient(clientId); setProjectDialog(true); }
   function openTask(task?: Task) {
     if (!task && !data.projects.length) { setProjectDialog(true); return; }
     setEditingTask(task || null); setTaskDialog(true);
@@ -135,6 +151,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
       title: String(form.get('title') || '').trim(),
       description: String(form.get('description') || '').trim(),
       project: String(form.get('project') || data.projects[0]?.id),
+      clientId: data.projects.find(p => p.id === String(form.get('project')))?.clientId,
       status: String(form.get('status') || 'Pending'),
       priority: String(form.get('priority') || 'Média'),
       due: String(form.get('due') || '2026-09-10'),
@@ -142,14 +159,16 @@ export default function Workspace({ user }: { user: AuthUser }) {
     };
     if (!task.title) return;
     const tasks = editingTask ? data.tasks.map(t => t.id === task.id ? task : t) : [task, ...data.tasks];
-    void commit({ ...data, tasks }); setTaskDialog(false); setEditingTask(null);
+    const log: Activity = { id: crypto.randomUUID(), type: editingTask ? 'task.updated' : 'task.created', entityType: 'task', entityId: task.id, description: `Tarefa “${task.title}” ${editingTask ? 'atualizada' : 'criada'}.`, created: new Date().toISOString() };
+    void commit({ ...data, tasks, activities: [log, ...data.activities] }); setTaskDialog(false); setEditingTask(null);
   }
   function saveProject(form: FormData) {
     const name = String(form.get('name') || '').trim(); if (!name) return;
-    const next: Project = { id: crypto.randomUUID(), name, description: String(form.get('description') || ''), color: String(form.get('color') || '#6550f4') };
-    void commit({ ...data, projects: [...data.projects, next] }); setProjectDialog(false);
+    const next: Project = { id: crypto.randomUUID(), name, description: String(form.get('description') || ''), color: String(form.get('color') || '#6550f4'), clientId: String(form.get('clientId') || '') || undefined, status: String(form.get('status') || 'Planejamento'), priority: String(form.get('priority') || 'Média'), due: String(form.get('due') || ''), technologies: String(form.get('technologies') || '').split(',').map(v => v.trim()).filter(Boolean), tags: String(form.get('tags') || '').split(',').map(v => v.trim()).filter(Boolean) };
+    const log: Activity = { id: crypto.randomUUID(), type: 'project.created', entityType: 'project', entityId: next.id, description: `Projeto “${name}” criado.`, created: new Date().toISOString() };
+    void commit({ ...data, projects: [...data.projects, next], activities: [log, ...data.activities] }); setProjectDialog(false); setProjectClient('');
   }
-  function completeTask(task: Task) { void commit({ ...data, tasks: data.tasks.map(t => t.id === task.id ? { ...t, status: t.status === 'Success' ? 'Pending' : 'Success' } : t) }); }
+  function completeTask(task: Task) { const completed=task.status!=='Success'; const log:Activity={id:crypto.randomUUID(),type:completed?'task.completed':'task.reopened',entityType:'task',entityId:task.id,description:`Tarefa “${task.title}” ${completed?'concluída':'reaberta'}.`,created:new Date().toISOString()}; void commit({ ...data, tasks: data.tasks.map(t => t.id === task.id ? { ...t, status: completed ? 'Success' : 'Pending' } : t), activities:[log,...data.activities] }); }
   function saveNote() {
     const notes = data.notes.map(n => n.id === selectedNote ? { ...n, content: noteDraft, updated: new Date().toISOString().slice(0, 10) } : n);
     void commit({ ...data, notes });
@@ -157,7 +176,8 @@ export default function Workspace({ user }: { user: AuthUser }) {
   function chooseNote(note: Note) { setSelectedNote(note.id); setNoteDraft(note.content); }
   function newNote() {
     const note: Note = { id: crypto.randomUUID(), name: `arquivo-${data.notes.length + 1}.md`, content: '', updated: new Date().toISOString().slice(0, 10) };
-    setSelectedNote(note.id); setNoteDraft(''); void commit({ ...data, notes: [...data.notes, note] });
+    const log:Activity={id:crypto.randomUUID(),type:'note.created',entityType:'note',entityId:note.id,description:`Arquivo “${note.name}” criado.`,created:new Date().toISOString()};
+    setSelectedNote(note.id); setNoteDraft(''); void commit({ ...data, notes: [...data.notes, note], activities:[log,...data.activities] });
   }
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -169,13 +189,13 @@ export default function Workspace({ user }: { user: AuthUser }) {
       <SidebarHeader>
         <div className="brand"><span className="brand-mark">a</span><strong>artweb<span>.so</span></strong><SidebarTrigger className="collapse-button" /></div>
         <div className="workspace-switch"><span className="workspace-icon">A</span><span>Meu workspace<small>Workspace pessoal</small></span><ChevronDown size={15} /></div>
-        <label className="side-search"><Search size={17} /><input aria-label="Buscar no workspace" placeholder="Buscar..." value={query} onChange={e => setQuery(e.target.value)} /><kbd>⌘ K</kbd></label>
+        <label className="side-search"><Search size={17} /><input aria-label="Buscar no workspace" placeholder="Buscar..." value={query} onFocus={()=>setView('Busca')} onChange={e => { setQuery(e.target.value); setView('Busca'); }} /><kbd>⌘ K</kbd></label>
       </SidebarHeader>
       <SidebarContent>
         <div className="nav-label">WORKSPACE</div>
         <SidebarMenu>{nav.map(n => <SidebarMenuItem key={n.label}><SidebarMenuButton className="nav-item" isActive={view === n.label} onClick={() => navigate(n.label)}><n.icon /><span>{n.label}</span>{n.label === 'Tarefas' && <small className="nav-count">{openCount}</small>}</SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu>
         <div className="sidebar-divider" />
-        <div className="nav-label">SEUS PROJETOS <button aria-label="Novo projeto" onClick={() => setProjectDialog(true)}><Plus size={13} /></button></div>
+        <div className="nav-label">SEUS PROJETOS <button aria-label="Novo projeto" onClick={() => openProject()}><Plus size={13} /></button></div>
         <div className="project-nav">{data.projects.map(p => <button key={p.id} onClick={() => navigate('Projetos')}><span className="project-dot" style={{ background: p.color }} />{p.name}<ChevronRight size={13} /></button>)}</div>
       </SidebarContent>
       <SidebarFooter>
@@ -187,17 +207,22 @@ export default function Workspace({ user }: { user: AuthUser }) {
 
     <main className="main-surface">
       <header className="topbar"><div><SidebarTrigger className="mobile-trigger" /><LayoutDashboard size={16} /><span>Workspace</span><ChevronRight size={13} /><strong>{view}</strong></div><div><span className="save-state">{ready ? saveState : 'Carregando…'}</span><span className="topbar-divider" /><img className="avatar" src={asset + 'A4-avatar-rosa.png'} alt="Seu perfil" /></div></header>
-      {view === 'Visão geral' && <Dashboard data={data} filtered={filtered} done={done} openCount={openCount} project={project} onNavigate={navigate} onNewTask={() => openTask()} onOpenTask={openTask} onComplete={completeTask} onNewProject={() => setProjectDialog(true)} />}
+      {view === 'Visão geral' && <Dashboard data={data} filtered={filtered} done={done} openCount={openCount} project={project} onNavigate={navigate} onNewTask={() => openTask()} onOpenTask={openTask} onComplete={completeTask} onNewProject={() => openProject()} />}
+      {view === 'CRM' && <CRMView data={data} onCommit={commit} />}
+      {view === 'Clientes' && <ClientsView data={data} onCommit={commit} onNewProject={openProject} />}
       {view === 'Tarefas' && <TasksView filtered={filtered} project={project} onNew={() => openTask()} onOpen={openTask} onComplete={completeTask} />}
-      {view === 'Projetos' && <ProjectsView data={data} onNew={() => setProjectDialog(true)} onOpenTask={openTask} />}
+      {view === 'Projetos' && <ProjectsView data={data} onNew={() => openProject()} onOpenTask={openTask} />}
       {view === 'Calendário' && <CalendarView tasks={filtered} onOpen={openTask} />}
       {view === 'Arquivos' && <FilesView notes={data.notes} selected={selectedNote} draft={noteDraft} onChoose={chooseNote} onDraft={setNoteDraft} onSave={saveNote} onNew={newNote} />}
+      {view === 'Conhecimento' && <KnowledgeView data={data} onCommit={commit} />}
+      {view === 'Busca' && <SearchView data={data} query={query} setQuery={setQuery} onNavigate={navigate} />}
       {view === 'Ajuda' && <SimpleView title="Ajuda e atalhos" text="Use a navegação lateral para alternar entre tarefas, projetos, calendário e arquivos. Pressione ⌘ K para começar uma busca." icon={CircleHelp} />}
       {view === 'Configurações' && <SimpleView title="Configurações" text="Seu workspace é privado e salva as mudanças automaticamente. Novas preferências aparecerão aqui." icon={Settings} />}
     </main>
 
     <TaskDialog open={taskDialog} task={editingTask} projects={data.projects} onClose={() => setTaskDialog(false)} onSave={saveTask} />
-    <ProjectDialog open={projectDialog} onClose={() => setProjectDialog(false)} onSave={saveProject} />
+    <ProjectDialog open={projectDialog} clients={data.clients} initialClient={projectClient} onClose={() => { setProjectDialog(false); setProjectClient(''); }} onSave={saveProject} />
+    <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} data={data} onNavigate={navigate} onQuick={kind => { if (kind === 'task') openTask(); else if (kind === 'project') openProject(); else navigate(kind === 'lead' ? 'CRM' : kind === 'client' ? 'Clientes' : 'Conhecimento'); }} />
   </SidebarProvider>;
 }
 
@@ -207,6 +232,8 @@ function PageHeading({ eyebrow, title, detail, action }: { eyebrow: string; titl
 
 function Dashboard({ data, filtered, done, openCount, project, onNavigate, onNewTask, onOpenTask, onComplete, onNewProject }: { data: Data; filtered: Task[]; done: number; openCount: number; project: (id: string) => Project; onNavigate: (v: string) => void; onNewTask: () => void; onOpenTask: (t: Task) => void; onComplete: (t: Task) => void; onNewProject: () => void }) {
   return <div className="page-content"><PageHeading eyebrow={todayLabel()} title="Bom trabalho começa aqui" detail={`${openCount} tarefas em aberto · ${data.projects.length} projetos em movimento`} action={<button className="violet-button" onClick={onNewTask}><Plus size={17} />Nova tarefa</button>} />
+    <div className="quick-actions"><span>CRIAR</span><button onClick={()=>onNavigate('CRM')}><Plus/>Lead</button><button onClick={()=>onNavigate('Clientes')}><Plus/>Cliente</button><button onClick={onNewProject}><Plus/>Projeto</button><button onClick={onNewTask}><Plus/>Tarefa</button><button onClick={()=>onNavigate('Conhecimento')}><Plus/>Nota</button><button onClick={()=>onNavigate('Conhecimento')}><Plus/>Ideia</button></div>
+    <OperationsStrip data={data} onNavigate={onNavigate} />
     <div className="stats-grid">{[
       { label: 'Total de projetos', value: data.projects.length, img: 'A3-kpi-1.png', sub: 'Todas as suas ideias, organizadas' },
       { label: 'Tarefas em aberto', value: openCount, img: 'A3-kpi-2.png', sub: 'Um próximo passo para cada projeto' },
@@ -214,7 +241,7 @@ function Dashboard({ data, filtered, done, openCount, project, onNavigate, onNew
       { label: 'Concluídas', value: done, img: 'A3-kpi-2.png', sub: 'Progresso que faz a diferença' },
     ].map(s => <section className="stat-card" key={s.label}><p>{s.label}</p><strong>{String(s.value).padStart(2, '0')}</strong><img src={asset + s.img} alt="" /><small>{s.sub}</small></section>)}</div>
     <div className="overview-grid"><section className="panel tasks-panel"><div className="panel-heading"><h2>Suas próximas tarefas <span>{openCount}</span></h2><button className="text-action" onClick={() => onNavigate('Tarefas')}>Ver todas<ArrowUpRight size={14} /></button></div><TaskTable tasks={filtered.filter(t => t.status !== 'Success').slice(0, 5)} project={project} onOpen={onOpenTask} onComplete={onComplete} /></section><Performance data={data} /></div>
-    <section className="panel projects-panel"><div className="panel-heading"><h2>Seus projetos</h2><button className="subtle-button" onClick={onNewProject}><Plus size={14} />Novo projeto</button></div><ProjectsTable data={data} /></section>
+    <div className="dashboard-bottom"><section className="panel projects-panel"><div className="panel-heading"><h2>Seus projetos</h2><button className="subtle-button" onClick={onNewProject}><Plus size={14} />Novo projeto</button></div><ProjectsTable data={data} /></section><section className="panel activity-panel"><div className="panel-heading"><h2>Atividade recente</h2><span>{data.activities.length}</span></div>{data.activities.length?<div className="activity-list">{data.activities.slice(0,6).map(item=><div key={item.id}><i/><p>{item.description}<time>{new Date(item.created).toLocaleString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</time></p></div>)}</div>:<div className="empty-table">As ações importantes aparecerão aqui.</div>}</section></div>
     <footer className="page-footer"><span>Um pouco de foco. Muito espaço para criar.</span><span>artweb.so</span></footer>
   </div>;
 }
@@ -233,8 +260,12 @@ function ProjectsTable({ data }: { data: Data }) {
 }
 
 function TasksView({ filtered, project, onNew, onOpen, onComplete }: { filtered: Task[]; project: (id: string) => Project; onNew: () => void; onOpen: (t: Task) => void; onComplete: (t: Task) => void }) {
+  const [filter,setFilter]=useState('Todas');
+  const [dateRange]=useState(()=>{const start=new Date();const end=new Date(start);end.setDate(end.getDate()+7);return {current:start.toISOString().slice(0,10),nextWeek:end.toISOString().slice(0,10)}});
   const columns = ['Pending', 'In progress', 'In review', 'Success'];
-  return <div className="page-content"><PageHeading eyebrow="TRABALHO EM MOVIMENTO" title="Tarefas" detail={`${filtered.length} tarefas no workspace`} action={<button className="violet-button" onClick={onNew}><Plus size={17} />Nova tarefa</button>} /><div className="kanban">{columns.map(status => <section className="kanban-column" key={status}><div className="kanban-title"><Status value={status} /><span>{filtered.filter(t => t.status === status).length}</span></div><div className="kanban-cards">{filtered.filter(t => t.status === status).map(t => <article className="task-card" key={t.id} onClick={() => onOpen(t)}><div className="task-card-head"><span className={'priority priority-' + t.priority.toLowerCase()}>{t.priority}</span><button onClick={e => { e.stopPropagation(); onComplete(t); }} aria-label="Concluir tarefa"><CircleCheck size={17} /></button></div><h3>{t.title}</h3><p>{t.description}</p><div className="task-card-foot"><span><Folder size={13} color={project(t.project).color} />{project(t.project).name}</span><span><CalendarDays size={13} />{new Date(t.due + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span></div></article>)}</div></section>)}</div></div>;
+  const {current,nextWeek}=dateRange;
+  const visible=filtered.filter(task=>filter==='Todas'||(filter==='Hoje'&&task.due===current)||(filter==='Próximas'&&task.due>current&&task.due<=nextWeek)||(filter==='Atrasadas'&&task.status!=='Success'&&task.due<current)||(filter==='Concluídas'&&task.status==='Success'));
+  return <div className="page-content"><PageHeading eyebrow="TRABALHO EM MOVIMENTO" title="Tarefas" detail={`${visible.length} tarefas nesta visualização`} action={<button className="violet-button" onClick={onNew}><Plus size={17} />Nova tarefa</button>} /><div className="task-filters">{['Todas','Hoje','Próximas','Atrasadas','Concluídas'].map(item=><button className={filter===item?'active':''} onClick={()=>setFilter(item)} key={item}>{item}<span>{item==='Todas'?filtered.length:item==='Hoje'?filtered.filter(t=>t.due===current).length:item==='Próximas'?filtered.filter(t=>t.due>current&&t.due<=nextWeek).length:item==='Atrasadas'?filtered.filter(t=>t.status!=='Success'&&t.due<current).length:filtered.filter(t=>t.status==='Success').length}</span></button>)}</div><div className="kanban">{columns.map(status => <section className="kanban-column" key={status}><div className="kanban-title"><Status value={status} /><span>{visible.filter(t => t.status === status).length}</span></div><div className="kanban-cards">{visible.filter(t => t.status === status).map(t => <article className="task-card" key={t.id} onClick={() => onOpen(t)}><div className="task-card-head"><span className={'priority priority-' + t.priority.toLowerCase()}>{t.priority}</span><button onClick={e => { e.stopPropagation(); onComplete(t); }} aria-label="Concluir tarefa"><CircleCheck size={17} /></button></div><h3>{t.title}</h3><p>{t.description}</p><div className="task-card-foot"><span><Folder size={13} color={project(t.project).color} />{project(t.project).name}</span><span><CalendarDays size={13} />{new Date(t.due + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span></div></article>)}</div></section>)}</div></div>;
 }
 
 function ProjectsView({ data, onNew, onOpenTask }: { data: Data; onNew: () => void; onOpenTask: (t: Task) => void }) {
@@ -258,6 +289,6 @@ function TaskDialog({ open, task, projects, onClose, onSave }: { open: boolean; 
   return <Dialog open={open} onOpenChange={v => !v && onClose()}><DialogContent className="app-dialog"><DialogHeader><DialogTitle>{task ? 'Editar tarefa' : 'Nova tarefa'}</DialogTitle><DialogDescription>Organize o próximo passo e mantenha o trabalho em movimento.</DialogDescription></DialogHeader><form action={onSave} className="form-grid"><label>Título<input name="title" defaultValue={task?.title} required autoFocus /></label><label>Descrição<textarea name="description" defaultValue={task?.description} rows={3} /></label><div className="form-row"><label>Projeto<select name="project" defaultValue={task?.project}>{projects.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label><label>Status<select name="status" defaultValue={task?.status || 'Pending'}>{statuses.map(s => <option value={s} key={s}>{statusLabels[s]}</option>)}</select></label></div><div className="form-row"><label>Prioridade<select name="priority" defaultValue={task?.priority || 'Média'}><option>Baixa</option><option>Média</option><option>Alta</option></select></label><label>Prazo<input name="due" type="date" defaultValue={task?.due || '2026-09-10'} /></label></div><DialogFooter><button type="button" className="subtle-button dialog-button" onClick={onClose}>Cancelar</button><button className="violet-button" type="submit">{task ? 'Salvar alterações' : 'Criar tarefa'}</button></DialogFooter></form></DialogContent></Dialog>;
 }
 
-function ProjectDialog({ open, onClose, onSave }: { open: boolean; onClose: () => void; onSave: (f: FormData) => void }) {
-  return <Dialog open={open} onOpenChange={v => !v && onClose()}><DialogContent className="app-dialog"><DialogHeader><DialogTitle>Novo projeto</DialogTitle><DialogDescription>Crie um espaço para reunir tarefas com o mesmo objetivo.</DialogDescription></DialogHeader><form action={onSave} className="form-grid"><label>Nome<input name="name" required autoFocus /></label><label>Descrição<textarea name="description" rows={3} /></label><label>Cor do projeto<input name="color" type="color" defaultValue="#6550f4" className="color-input" /></label><DialogFooter><button type="button" className="subtle-button dialog-button" onClick={onClose}>Cancelar</button><button className="violet-button" type="submit">Criar projeto</button></DialogFooter></form></DialogContent></Dialog>;
+function ProjectDialog({ open, clients, initialClient, onClose, onSave }: { open: boolean; clients: Client[]; initialClient: string; onClose: () => void; onSave: (f: FormData) => void }) {
+  return <Dialog open={open} onOpenChange={v => !v && onClose()}><DialogContent className="app-dialog wide-dialog"><DialogHeader><DialogTitle>Novo projeto</DialogTitle><DialogDescription>Crie um workspace conectado a cliente, prazo e contexto técnico.</DialogDescription></DialogHeader><form action={onSave} className="form-grid"><div className="form-row"><label>Nome<input name="name" required autoFocus /></label><label>Cliente<select name="clientId" defaultValue={initialClient}><option value="">Sem cliente</option>{clients.map(client=><option value={client.id} key={client.id}>{client.company}</option>)}</select></label></div><label>Descrição<textarea name="description" rows={3} /></label><div className="form-row"><label>Status<select name="status"><option>Planejamento</option><option>Ativo</option><option>Em espera</option><option>Concluído</option></select></label><label>Prioridade<select name="priority"><option>Baixa</option><option>Média</option><option>Alta</option><option>Crítica</option></select></label></div><div className="form-row"><label>Prazo<input name="due" type="date" /></label><label>Cor<input name="color" type="color" defaultValue="#6550f4" className="color-input" /></label></div><div className="form-row"><label>Tecnologias<input name="technologies" placeholder="Next.js, WordPress" /></label><label>Tags<input name="tags" placeholder="site, redesign" /></label></div><DialogFooter><button type="button" className="subtle-button dialog-button" onClick={onClose}>Cancelar</button><button className="violet-button" type="submit">Criar projeto</button></DialogFooter></form></DialogContent></Dialog>;
 }
