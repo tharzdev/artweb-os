@@ -29,7 +29,7 @@ export default function AuthShell() {
       : { email: String(form.get('email') || ''), password: String(form.get('password') || '') };
     try {
       const response = await fetch(`/api/auth/${mode}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-      const result = await response.json();
+      const result = await response.json().catch(() => ({ error: 'O servidor não conseguiu concluir esta solicitação.' }));
       if (!response.ok) { setError(result.error || 'Não foi possível continuar.'); return; }
       if (mode === 'register') {
         setMode('login');

@@ -53,7 +53,8 @@ export default function Workspace({ user }: { user: AuthUser }) {
   const [selectedNote, setSelectedNote] = useState('');
   const [noteDraft, setNoteDraft] = useState('');
   const dataRef = useRef(data);
-  dataRef.current = data;
+
+  useEffect(() => { dataRef.current = data; }, [data]);
 
   useEffect(() => {
     fetch('/api/workspace').then(async r => {
@@ -187,7 +188,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
     <main className="main-surface">
       <header className="topbar"><div><SidebarTrigger className="mobile-trigger" /><LayoutDashboard size={16} /><span>Workspace</span><ChevronRight size={13} /><strong>{view}</strong></div><div><span className="save-state">{ready ? saveState : 'Carregando…'}</span><span className="topbar-divider" /><img className="avatar" src={asset + 'A4-avatar-rosa.png'} alt="Seu perfil" /></div></header>
       {view === 'Visão geral' && <Dashboard data={data} filtered={filtered} done={done} openCount={openCount} project={project} onNavigate={navigate} onNewTask={() => openTask()} onOpenTask={openTask} onComplete={completeTask} onNewProject={() => setProjectDialog(true)} />}
-      {view === 'Tarefas' && <TasksView data={data} filtered={filtered} project={project} onNew={() => openTask()} onOpen={openTask} onComplete={completeTask} />}
+      {view === 'Tarefas' && <TasksView filtered={filtered} project={project} onNew={() => openTask()} onOpen={openTask} onComplete={completeTask} />}
       {view === 'Projetos' && <ProjectsView data={data} onNew={() => setProjectDialog(true)} onOpenTask={openTask} />}
       {view === 'Calendário' && <CalendarView tasks={filtered} onOpen={openTask} />}
       {view === 'Arquivos' && <FilesView notes={data.notes} selected={selectedNote} draft={noteDraft} onChoose={chooseNote} onDraft={setNoteDraft} onSave={saveNote} onNew={newNote} />}
@@ -231,7 +232,7 @@ function ProjectsTable({ data }: { data: Data }) {
   return <Table><TableHeader><TableRow><TableHead>Nome do projeto</TableHead><TableHead>Status</TableHead><TableHead>Progresso</TableHead><TableHead>Tarefas</TableHead><TableHead>Responsável</TableHead></TableRow></TableHeader><TableBody>{data.projects.length === 0 ? <TableRow><TableCell colSpan={5}><div className="empty-table">Seu workspace está vazio. Crie o primeiro projeto.</div></TableCell></TableRow> : data.projects.map(p => { const ts = data.tasks.filter(t => t.project === p.id); const completed = ts.filter(t => t.status === 'Success').length; const pct = Math.round(completed / Math.max(ts.length, 1) * 100); return <TableRow key={p.id}><TableCell><span className="project-name"><Folder size={19} fill={p.color} color={p.color} />{p.name}</span></TableCell><TableCell><Status value={pct === 100 && ts.length > 0 ? 'Success' : 'In progress'} /></TableCell><TableCell><div className="progress-cell"><div className="segmented"><i style={{ width: pct + '%', background: p.color }} /></div>{pct}%</div></TableCell><TableCell>{completed}<span className="muted"> / {ts.length}</span></TableCell><TableCell><span className="owner"><img src={asset + 'A4-avatar-rosa.png'} alt="" />Você</span></TableCell></TableRow>; })}</TableBody></Table>;
 }
 
-function TasksView({ data, filtered, project, onNew, onOpen, onComplete }: { data: Data; filtered: Task[]; project: (id: string) => Project; onNew: () => void; onOpen: (t: Task) => void; onComplete: (t: Task) => void }) {
+function TasksView({ filtered, project, onNew, onOpen, onComplete }: { filtered: Task[]; project: (id: string) => Project; onNew: () => void; onOpen: (t: Task) => void; onComplete: (t: Task) => void }) {
   const columns = ['Pending', 'In progress', 'In review', 'Success'];
   return <div className="page-content"><PageHeading eyebrow="TRABALHO EM MOVIMENTO" title="Tarefas" detail={`${filtered.length} tarefas no workspace`} action={<button className="violet-button" onClick={onNew}><Plus size={17} />Nova tarefa</button>} /><div className="kanban">{columns.map(status => <section className="kanban-column" key={status}><div className="kanban-title"><Status value={status} /><span>{filtered.filter(t => t.status === status).length}</span></div><div className="kanban-cards">{filtered.filter(t => t.status === status).map(t => <article className="task-card" key={t.id} onClick={() => onOpen(t)}><div className="task-card-head"><span className={'priority priority-' + t.priority.toLowerCase()}>{t.priority}</span><button onClick={e => { e.stopPropagation(); onComplete(t); }} aria-label="Concluir tarefa"><CircleCheck size={17} /></button></div><h3>{t.title}</h3><p>{t.description}</p><div className="task-card-foot"><span><Folder size={13} color={project(t.project).color} />{project(t.project).name}</span><span><CalendarDays size={13} />{new Date(t.due + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span></div></article>)}</div></section>)}</div></div>;
 }
