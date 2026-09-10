@@ -5,7 +5,7 @@ import {
   ArrowUpRight, CalendarDays, CheckSquare, ChevronDown, ChevronRight,
   CircleCheck, CircleDashed, CircleHelp, CircleX, Clock3, Command,
   FileText, Folder, LayoutDashboard, MessageCircle, Plus, Search,
-  Send, Settings, TriangleAlert, User,
+  Send, Settings, TriangleAlert, User, LogOut,
 } from 'lucide-react';
 import {
   SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarFooter,
@@ -20,7 +20,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
-import { seed, statusLabels, statuses, type Data, type Note, type Project, type Task } from '@/lib/model';
+import { emptyData, statusLabels, statuses, type Data, type Note, type Project, type Task } from '@/lib/model';
+import type { AuthUser } from '@/lib/auth';
 
 const asset = '/assets/';
 const nav = [
@@ -40,29 +41,33 @@ function todayLabel() {
   return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }).format(new Date()).toUpperCase();
 }
 
-export default function Workspace() {
+export default function Workspace({ user }: { user: AuthUser }) {
   const [view, setView] = useState('Visão geral');
   const [query, setQuery] = useState('');
-  const [data, setData] = useState<Data>(seed);
+  const [data, setData] = useState<Data>(() => ({ ...emptyData, tasks: [], projects: [], notes: [] }));
   const [ready, setReady] = useState(false);
   const [saveState, setSaveState] = useState('Carregando…');
   const [taskDialog, setTaskDialog] = useState(false);
   const [projectDialog, setProjectDialog] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [selectedNote, setSelectedNote] = useState('n1');
+  const [selectedNote, setSelectedNote] = useState('');
   const [noteDraft, setNoteDraft] = useState('');
   const dataRef = useRef(data);
   dataRef.current = data;
 
   useEffect(() => {
-    fetch('/api/workspace').then(r => r.json()).then(async result => {
-      const initial = result.data || seed;
+    fetch('/api/workspace').then(async r => {
+      if (r.status === 401) { window.location.reload(); throw new Error('Sessão encerrada'); }
+      if (!r.ok) throw new Error('Falha ao carregar');
+      return r.json();
+    }).then(result => {
+      const initial = result.data || emptyData;
       setData(initial);
+      setSelectedNote(initial.notes[0]?.id || '');
       setNoteDraft(initial.notes[0]?.content || '');
       setReady(true);
       setSaveState('Tudo salvo');
-      if (!result.data) await fetch('/api/workspace', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(seed) });
-    }).catch(() => { setReady(true); setSaveState('Modo local'); setNoteDraft(seed.notes[0].content); });
+    }).catch(() => { setReady(true); setSaveState('Não foi possível carregar'); });
   }, []);
 
   useEffect(() => {
@@ -89,6 +94,7 @@ export default function Workspace() {
         const value = input as { title?: string; description?: string; priority?: string; due?: string };
         if (!value.title?.trim()) throw new Error('title é obrigatório');
         const current = dataRef.current;
+        if (!current.projects.length) throw new Error('Crie um projeto antes da primeira tarefa.');
         const task: Task = { id: crypto.randomUUID(), title: value.title.trim(), description: value.description?.trim() || '', project: current.projects[0].id, status: 'Pending', priority: value.priority || 'Média', due: value.due || new Date().toISOString().slice(0, 10), created: new Date().toISOString().slice(0, 10) };
         const next = { ...current, tasks: [task, ...current.tasks] };
         dataRef.current = next; setData(next); setSaveState('Salvando…');
@@ -113,12 +119,15 @@ export default function Workspace() {
     const p = data.projects.find(item => item.id === t.project)?.name || '';
     return `${t.title} ${t.description} ${p}`.toLowerCase().includes(query.toLowerCase());
   }), [data, query]);
-  const project = (id: string) => data.projects.find(p => p.id === id) || data.projects[0];
+  const project = (id: string) => data.projects.find(p => p.id === id) || data.projects[0] || { id: '', name: 'Sem projeto', color: '#77777d', description: '' };
   const done = data.tasks.filter(t => t.status === 'Success').length;
   const openCount = data.tasks.length - done;
 
   function navigate(label: string) { setView(label); }
-  function openTask(task?: Task) { setEditingTask(task || null); setTaskDialog(true); }
+  function openTask(task?: Task) {
+    if (!task && !data.projects.length) { setProjectDialog(true); return; }
+    setEditingTask(task || null); setTaskDialog(true);
+  }
   function saveTask(form: FormData) {
     const task: Task = {
       id: editingTask?.id || crypto.randomUUID(),
@@ -145,6 +154,14 @@ export default function Workspace() {
     void commit({ ...data, notes });
   }
   function chooseNote(note: Note) { setSelectedNote(note.id); setNoteDraft(note.content); }
+  function newNote() {
+    const note: Note = { id: crypto.randomUUID(), name: `arquivo-${data.notes.length + 1}.md`, content: '', updated: new Date().toISOString().slice(0, 10) };
+    setSelectedNote(note.id); setNoteDraft(''); void commit({ ...data, notes: [...data.notes, note] });
+  }
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.reload();
+  }
 
   return <SidebarProvider style={{ '--sidebar-width': '258px' } as React.CSSProperties}>
     <Sidebar className="app-sidebar">
@@ -163,7 +180,7 @@ export default function Workspace() {
       <SidebarFooter>
         <div className="focus-card"><img src={asset + 'A2-cubo.png'} alt="" /><h3>Espaço para grandes ideias.</h3><p>Um passo de cada vez.<br />Seu próximo projeto começa aqui.</p><button className="violet-button" onClick={() => navigate('Projetos')}>Explorar projetos<ArrowUpRight size={15} /></button></div>
         <button className="bottom-nav" onClick={() => navigate('Ajuda')}><CircleHelp size={17} />Ajuda e atalhos</button>
-        <DropdownMenu><DropdownMenuTrigger className="account"><img src={asset + 'A5-avatar-paisagem.png'} alt="" /><span>Meu perfil<small>Workspace pessoal</small></span><ChevronDown size={16} /></DropdownMenuTrigger><DropdownMenuContent side="top" align="start" className="account-menu"><DropdownMenuItem onClick={() => navigate('Configurações')}><User />Perfil</DropdownMenuItem><DropdownMenuItem onClick={() => navigate('Configurações')}><Settings />Configurações</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate('Ajuda')}><Command />Atalhos de teclado</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+        <DropdownMenu><DropdownMenuTrigger className="account"><img src={asset + 'A5-avatar-paisagem.png'} alt="" /><span>{user.name}<small>{user.email}</small></span><ChevronDown size={16} /></DropdownMenuTrigger><DropdownMenuContent side="top" align="start" className="account-menu"><DropdownMenuItem onClick={() => navigate('Configurações')}><User />Perfil</DropdownMenuItem><DropdownMenuItem onClick={() => navigate('Configurações')}><Settings />Configurações</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate('Ajuda')}><Command />Atalhos de teclado</DropdownMenuItem><DropdownMenuItem onClick={logout}><LogOut />Sair da conta</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
       </SidebarFooter>
     </Sidebar>
 
@@ -173,7 +190,7 @@ export default function Workspace() {
       {view === 'Tarefas' && <TasksView data={data} filtered={filtered} project={project} onNew={() => openTask()} onOpen={openTask} onComplete={completeTask} />}
       {view === 'Projetos' && <ProjectsView data={data} onNew={() => setProjectDialog(true)} onOpenTask={openTask} />}
       {view === 'Calendário' && <CalendarView tasks={filtered} onOpen={openTask} />}
-      {view === 'Arquivos' && <FilesView notes={data.notes} selected={selectedNote} draft={noteDraft} onChoose={chooseNote} onDraft={setNoteDraft} onSave={saveNote} />}
+      {view === 'Arquivos' && <FilesView notes={data.notes} selected={selectedNote} draft={noteDraft} onChoose={chooseNote} onDraft={setNoteDraft} onSave={saveNote} onNew={newNote} />}
       {view === 'Ajuda' && <SimpleView title="Ajuda e atalhos" text="Use a navegação lateral para alternar entre tarefas, projetos, calendário e arquivos. Pressione ⌘ K para começar uma busca." icon={CircleHelp} />}
       {view === 'Configurações' && <SimpleView title="Configurações" text="Seu workspace é privado e salva as mudanças automaticamente. Novas preferências aparecerão aqui." icon={Settings} />}
     </main>
@@ -202,7 +219,7 @@ function Dashboard({ data, filtered, done, openCount, project, onNavigate, onNew
 }
 
 function TaskTable({ tasks, project, onOpen, onComplete }: { tasks: Task[]; project: (id: string) => Project; onOpen: (t: Task) => void; onComplete: (t: Task) => void }) {
-  return <Table><TableHeader><TableRow><TableHead>Tarefa</TableHead><TableHead>Projeto</TableHead><TableHead>Status</TableHead><TableHead>Prazo</TableHead></TableRow></TableHeader><TableBody>{tasks.map(t => <TableRow key={t.id} onDoubleClick={() => onOpen(t)}><TableCell><div className="task-name"><button className={'empty-check ' + (t.status === 'Success' ? 'checked' : '')} aria-label="Alternar conclusão" onClick={() => onComplete(t)} />{t.title}</div></TableCell><TableCell><span className="project-name"><Folder size={16} fill={project(t.project).color} color={project(t.project).color} />{project(t.project).name}</span></TableCell><TableCell><Status value={t.status} /></TableCell><TableCell><button className="date-cell" onClick={() => onOpen(t)}>{new Date(t.due + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</button></TableCell></TableRow>)}</TableBody></Table>;
+  return <Table><TableHeader><TableRow><TableHead>Tarefa</TableHead><TableHead>Projeto</TableHead><TableHead>Status</TableHead><TableHead>Prazo</TableHead></TableRow></TableHeader><TableBody>{tasks.length === 0 ? <TableRow><TableCell colSpan={4}><div className="empty-table">Nenhuma tarefa ainda. Crie um projeto para começar.</div></TableCell></TableRow> : tasks.map(t => <TableRow key={t.id} onDoubleClick={() => onOpen(t)}><TableCell><div className="task-name"><button className={'empty-check ' + (t.status === 'Success' ? 'checked' : '')} aria-label="Alternar conclusão" onClick={() => onComplete(t)} />{t.title}</div></TableCell><TableCell><span className="project-name"><Folder size={16} fill={project(t.project).color} color={project(t.project).color} />{project(t.project).name}</span></TableCell><TableCell><Status value={t.status} /></TableCell><TableCell><button className="date-cell" onClick={() => onOpen(t)}>{new Date(t.due + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</button></TableCell></TableRow>)}</TableBody></Table>;
 }
 
 function Performance({ data }: { data: Data }) {
@@ -211,7 +228,7 @@ function Performance({ data }: { data: Data }) {
 }
 
 function ProjectsTable({ data }: { data: Data }) {
-  return <Table><TableHeader><TableRow><TableHead>Nome do projeto</TableHead><TableHead>Status</TableHead><TableHead>Progresso</TableHead><TableHead>Tarefas</TableHead><TableHead>Responsável</TableHead></TableRow></TableHeader><TableBody>{data.projects.map(p => { const ts = data.tasks.filter(t => t.project === p.id); const completed = ts.filter(t => t.status === 'Success').length; const pct = Math.round(completed / Math.max(ts.length, 1) * 100); return <TableRow key={p.id}><TableCell><span className="project-name"><Folder size={19} fill={p.color} color={p.color} />{p.name}</span></TableCell><TableCell><Status value={pct === 100 ? 'Success' : 'In progress'} /></TableCell><TableCell><div className="progress-cell"><div className="segmented"><i style={{ width: pct + '%', background: p.color }} /></div>{pct}%</div></TableCell><TableCell>{completed}<span className="muted"> / {ts.length}</span></TableCell><TableCell><span className="owner"><img src={asset + 'A4-avatar-rosa.png'} alt="" />Você</span></TableCell></TableRow>; })}</TableBody></Table>;
+  return <Table><TableHeader><TableRow><TableHead>Nome do projeto</TableHead><TableHead>Status</TableHead><TableHead>Progresso</TableHead><TableHead>Tarefas</TableHead><TableHead>Responsável</TableHead></TableRow></TableHeader><TableBody>{data.projects.length === 0 ? <TableRow><TableCell colSpan={5}><div className="empty-table">Seu workspace está vazio. Crie o primeiro projeto.</div></TableCell></TableRow> : data.projects.map(p => { const ts = data.tasks.filter(t => t.project === p.id); const completed = ts.filter(t => t.status === 'Success').length; const pct = Math.round(completed / Math.max(ts.length, 1) * 100); return <TableRow key={p.id}><TableCell><span className="project-name"><Folder size={19} fill={p.color} color={p.color} />{p.name}</span></TableCell><TableCell><Status value={pct === 100 && ts.length > 0 ? 'Success' : 'In progress'} /></TableCell><TableCell><div className="progress-cell"><div className="segmented"><i style={{ width: pct + '%', background: p.color }} /></div>{pct}%</div></TableCell><TableCell>{completed}<span className="muted"> / {ts.length}</span></TableCell><TableCell><span className="owner"><img src={asset + 'A4-avatar-rosa.png'} alt="" />Você</span></TableCell></TableRow>; })}</TableBody></Table>;
 }
 
 function TasksView({ data, filtered, project, onNew, onOpen, onComplete }: { data: Data; filtered: Task[]; project: (id: string) => Project; onNew: () => void; onOpen: (t: Task) => void; onComplete: (t: Task) => void }) {
@@ -220,7 +237,7 @@ function TasksView({ data, filtered, project, onNew, onOpen, onComplete }: { dat
 }
 
 function ProjectsView({ data, onNew, onOpenTask }: { data: Data; onNew: () => void; onOpenTask: (t: Task) => void }) {
-  return <div className="page-content"><PageHeading eyebrow="TODAS AS FRENTES" title="Projetos" detail={`${data.projects.length} espaços ativos`} action={<button className="violet-button" onClick={onNew}><Plus size={17} />Novo projeto</button>} /><div className="project-grid">{data.projects.map(p => { const tasks = data.tasks.filter(t => t.project === p.id); const done = tasks.filter(t => t.status === 'Success').length; const pct = Math.round(done / Math.max(tasks.length, 1) * 100); return <section className="project-card" key={p.id}><div className="project-card-icon" style={{ background: p.color + '22', color: p.color }}><Folder /></div><span className="project-percent">{pct}%</span><h2>{p.name}</h2><p>{p.description}</p><div className="project-progress"><i style={{ width: pct + '%', background: p.color }} /></div><div className="project-summary"><span>{done} concluídas</span><span>{tasks.length} tarefas</span></div><div className="project-recent">{tasks.slice(0, 3).map(t => <button key={t.id} onClick={() => onOpenTask(t)}><span className={t.status === 'Success' ? 'mini-check done' : 'mini-check'} />{t.title}</button>)}</div></section>; })}</div></div>;
+  return <div className="page-content"><PageHeading eyebrow="TODAS AS FRENTES" title="Projetos" detail={`${data.projects.length} espaços ativos`} action={<button className="violet-button" onClick={onNew}><Plus size={17} />Novo projeto</button>} /><div className="project-grid">{data.projects.length === 0 ? <section className="empty-collection"><Folder size={28} /><h2>Crie seu primeiro projeto</h2><p>Projetos reúnem suas tarefas e ajudam você a acompanhar cada objetivo.</p><button className="violet-button" onClick={onNew}><Plus size={16} />Novo projeto</button></section> : data.projects.map(p => { const tasks = data.tasks.filter(t => t.project === p.id); const done = tasks.filter(t => t.status === 'Success').length; const pct = Math.round(done / Math.max(tasks.length, 1) * 100); return <section className="project-card" key={p.id}><div className="project-card-icon" style={{ background: p.color + '22', color: p.color }}><Folder /></div><span className="project-percent">{pct}%</span><h2>{p.name}</h2><p>{p.description}</p><div className="project-progress"><i style={{ width: pct + '%', background: p.color }} /></div><div className="project-summary"><span>{done} concluídas</span><span>{tasks.length} tarefas</span></div><div className="project-recent">{tasks.slice(0, 3).map(t => <button key={t.id} onClick={() => onOpenTask(t)}><span className={t.status === 'Success' ? 'mini-check done' : 'mini-check'} />{t.title}</button>)}</div></section>; })}</div></div>;
 }
 
 function CalendarView({ tasks, onOpen }: { tasks: Task[]; onOpen: (t: Task) => void }) {
@@ -228,8 +245,8 @@ function CalendarView({ tasks, onOpen }: { tasks: Task[]; onOpen: (t: Task) => v
   return <div className="page-content"><PageHeading eyebrow="SETEMBRO DE 2026" title="Calendário" detail="Prazos e entregas do seu workspace" /><section className="calendar panel"><div className="weekdays">{['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => <span key={d}>{d}</span>)}</div><div className="calendar-grid">{days.map((day, i) => <div className={'calendar-day ' + (day < 1 || day > 30 ? 'outside' : '')} key={i}><strong>{day > 0 && day <= 30 ? day : day < 1 ? 31 : day - 30}</strong>{tasks.filter(t => Number(t.due.slice(8)) === day).map(t => <button key={t.id} onClick={() => onOpen(t)}><span className={'calendar-dot status-dot-' + t.status.replace(' ', '-').toLowerCase()} />{t.title}</button>)}</div>)}</div></section></div>;
 }
 
-function FilesView({ notes, selected, draft, onChoose, onDraft, onSave }: { notes: Note[]; selected: string; draft: string; onChoose: (n: Note) => void; onDraft: (v: string) => void; onSave: () => void }) {
-  return <div className="files-layout"><aside className="file-tree"><div className="file-tree-head"><strong>Arquivos</strong><button aria-label="Novo arquivo"><Plus size={16} /></button></div>{notes.map(n => <button className={selected === n.id ? 'active' : ''} key={n.id} onClick={() => onChoose(n)}><FileText size={15} />{n.name}</button>)}<div className="folder-row"><ChevronDown size={14} />Referências</div><span className="file-child">design-spec.md</span><span className="file-child">prompts.md</span></aside><section className="editor"><div className="editor-top"><div><strong>{notes.find(n => n.id === selected)?.name}</strong><span>Markdown</span></div><button className="violet-button" onClick={onSave}>Salvar arquivo</button></div><textarea aria-label="Conteúdo do arquivo" value={draft} onChange={e => onDraft(e.target.value)} spellCheck={false} /></section><aside className="editor-preview"><div className="preview-label">PRÉVIA</div>{draft.split('\n').map((line, i) => line.startsWith('# ') ? <h1 key={i}>{line.slice(2)}</h1> : line.startsWith('## ') ? <h2 key={i}>{line.slice(3)}</h2> : line ? <p key={i}>{line}</p> : <br key={i} />)}</aside></div>;
+function FilesView({ notes, selected, draft, onChoose, onDraft, onSave, onNew }: { notes: Note[]; selected: string; draft: string; onChoose: (n: Note) => void; onDraft: (v: string) => void; onSave: () => void; onNew: () => void }) {
+  return <div className="files-layout"><aside className="file-tree"><div className="file-tree-head"><strong>Arquivos</strong><button aria-label="Novo arquivo" onClick={onNew}><Plus size={16} /></button></div>{notes.map(n => <button className={selected === n.id ? 'active' : ''} key={n.id} onClick={() => onChoose(n)}><FileText size={15} />{n.name}</button>)}</aside><section className="editor"><div className="editor-top"><div><strong>{notes.find(n => n.id === selected)?.name || 'Nenhum arquivo'}</strong><span>Markdown</span></div><button className="violet-button" onClick={notes.length ? onSave : onNew}>{notes.length ? 'Salvar arquivo' : 'Criar arquivo'}</button></div><textarea aria-label="Conteúdo do arquivo" value={draft} onChange={e => onDraft(e.target.value)} spellCheck={false} disabled={!notes.length} placeholder={notes.length ? 'Comece a escrever…' : 'Crie seu primeiro arquivo para começar.'} /></section><aside className="editor-preview"><div className="preview-label">PRÉVIA</div>{draft.split('\n').map((line, i) => line.startsWith('# ') ? <h1 key={i}>{line.slice(2)}</h1> : line.startsWith('## ') ? <h2 key={i}>{line.slice(3)}</h2> : line ? <p key={i}>{line}</p> : <br key={i} />)}</aside></div>;
 }
 
 function SimpleView({ title, text, icon: Icon }: { title: string; text: string; icon: typeof Settings }) {

@@ -8,6 +8,13 @@
       "when": 1789063200000,
       "tag": "0000_workspace_state",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789077600000,
+      "tag": "0001_auth",
+      "breakpoints": true
     }
   ]
 }
