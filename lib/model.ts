@@ -14,9 +14,23 @@ export const statuses=['Pending','In progress','In review','Success','Submitted'
 export const statusLabels:Record<string,string>={Pending:'Pendente','In progress':'Em andamento','In review':'Em revisão',Success:'Concluída',Submitted:'Enviada',Failed:'Falhou',Expired:'Expirada'};
 export const leadStatuses:LeadStatus[]=['Encontrado','Analisado','Contatado','Respondeu','Reunião','Proposta','Negociação','Cliente'];
 export const defaultProfile:Profile={displayName:'',title:'',bio:'',avatarDataUrl:''};
-export const defaultPreferences:Preferences={theme:'dark',accent:'#6550f4',density:'comfortable',startView:'Visão geral',weekStartsOn:'sunday',emailNotifications:true,deadlineNotifications:true,commercialNotifications:true,memorySuggestions:true,contextBudget:'balanced'};
+export const monochromeAccents=['#F4F4F4','#BDBDBD','#858585'] as const;
+export const defaultPreferences:Preferences={theme:'dark',accent:monochromeAccents[0],density:'comfortable',startView:'Visão geral',weekStartsOn:'sunday',emailNotifications:true,deadlineNotifications:true,commercialNotifications:true,memorySuggestions:true,contextBudget:'balanced'};
 export const emptyData:Data={version:2,projects:[],tasks:[],notes:[],leads:[],clients:[],memories:[],activities:[],profile:defaultProfile,preferences:defaultPreferences};
 
+function normalizeAccent(value?:string){
+  const normalized=value?.toUpperCase();
+  return monochromeAccents.includes(normalized as typeof monochromeAccents[number])?normalized:defaultPreferences.accent;
+}
+
+function normalizeProjectColor(value?:string){
+  if(!value)return '#D8D8D8';
+  const match=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value);
+  if(!match)return value;
+  const red=Number.parseInt(match[1],16);const green=Number.parseInt(match[2],16);const blue=Number.parseInt(match[3],16);
+  return blue>green*1.15&&red>green*1.08?'#D8D8D8':value;
+}
+
 export function normalizeData(value:Partial<Data>|null|undefined):Data{
-  return {version:2,projects:value?.projects||[],tasks:value?.tasks||[],notes:value?.notes||[],leads:value?.leads||[],clients:value?.clients||[],memories:value?.memories||[],activities:value?.activities||[],profile:{...defaultProfile,...value?.profile},preferences:{...defaultPreferences,...value?.preferences}};
+  return {version:2,projects:(value?.projects||[]).map(project=>({...project,color:normalizeProjectColor(project.color)})),tasks:value?.tasks||[],notes:value?.notes||[],leads:value?.leads||[],clients:value?.clients||[],memories:value?.memories||[],activities:value?.activities||[],profile:{...defaultProfile,...value?.profile},preferences:{...defaultPreferences,...value?.preferences,accent:normalizeAccent(value?.preferences?.accent)}};
 }

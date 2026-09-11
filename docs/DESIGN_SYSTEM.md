@@ -1,6 +1,6 @@
 # ArtWeb OS — Design system
 
-O sistema preserva a linguagem atual: fundo `#1B1B1D`, sidebar `#161616`, superfícies `#202022`, borda `#333335` e destaque violeta `#6550F4`.
+O sistema preserva a linguagem atual: fundo `#1B1B1D`, sidebar `#161616`, superfícies `#202022`, borda `#333335` e destaque branco `#F4F4F4`. A interface usa somente preto, cinza e branco nos elementos de marca, navegação e ação.
 
 ## Princípios
 
@@ -18,7 +18,7 @@ O sistema preserva a linguagem atual: fundo `#1B1B1D`, sidebar `#161616`, superf
 - raios: 5, 8, 11 e 16 px;
 - espaçamento: 4, 8, 12, 16, 24, 32 e 48 px;
 - corpo mínimo recomendado: 13 px na interface densa e 16 px em leitura longa;
-- foco: contorno violeta de 2 px;
+- foco: contorno branco ou cinza-claro de 2 px;
 - alvos interativos: mínimo de 40 px em telas móveis.
 
 Dark mode permanece padrão. Light mode e preferência do sistema usam os mesmos tokens, sem alterar semântica ou estrutura. O usuário também pode escolher cor de destaque e densidade da interface.
