@@ -2,7 +2,7 @@
 
 ## Marca principal
 
-A marca oficial é o símbolo angular **W.** fornecido pelo proprietário do produto. O arquivo mestre usado pelo sistema é `public/assets/artweb-logo.png`, preservado sem redesenho.
+A marca oficial é o símbolo angular **W.** fornecido pelo proprietário do produto. O arquivo mestre usado pelo sistema é `public/assets/artweb-logo.png`, com fundo transparente e geometria preservada.
 
 ## Aplicações substituídas
 
@@ -17,9 +17,9 @@ A marca oficial é o símbolo angular **W.** fornecido pelo proprietário do pro
 
 | Aplicação | Área visível |
 | --- | ---: |
-| Barra lateral | 108 × 43 px |
+| Barra lateral | 94 × 38 px |
 | Login e cadastro | 124 × 68 px |
 | Carregamento | 130 × 66 px |
 | Selo inferior | 39 × 21 px |
 
-O fundo preto original integra a aplicação da marca e se mistura às superfícies escuras do ArtWeb OS. No tema claro, ele funciona como uma placa preta de contraste constante.
+O arquivo usa transparência real. Cada aplicação mantém respiro interno suficiente para preservar as extremidades do W e o ponto, inclusive na barra lateral compacta e no tema claro.
