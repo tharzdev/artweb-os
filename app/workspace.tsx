@@ -23,6 +23,7 @@ import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@
 import { emptyData, normalizeData, statusLabels, statuses, type Activity, type Client, type Data, type Note, type Project, type Task } from '@/lib/model';
 import type { AuthUser } from '@/lib/auth';
 import { ClientsView, CommandPalette, CRMView, KnowledgeView, OperationsStrip, SearchView } from '@/components/os/business-modules';
+import { ProfileView, SettingsView } from '@/components/os/settings-modules';
 
 const asset = '/assets/';
 const nav = [
@@ -63,6 +64,19 @@ export default function Workspace({ user }: { user: AuthUser }) {
   useEffect(() => { dataRef.current = data; }, [data]);
 
   useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: light)');
+    const apply = () => {
+      const theme = data.preferences.theme === 'system' ? (media.matches ? 'light' : 'dark') : data.preferences.theme;
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.dataset.density = data.preferences.density;
+      document.documentElement.style.setProperty('--user-accent', data.preferences.accent);
+    };
+    apply();
+    if (data.preferences.theme === 'system') media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  }, [data.preferences.theme, data.preferences.accent, data.preferences.density]);
+
+  useEffect(() => {
     function shortcut(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setCommandOpen(true); }
     }
@@ -80,6 +94,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
       setData(initial);
       setSelectedNote(initial.notes[0]?.id || '');
       setNoteDraft(initial.notes[0]?.content || '');
+      setView(initial.preferences.startView || 'Visão geral');
       setReady(true);
       setSaveState('Tudo salvo');
     }).catch(() => { setReady(true); setSaveState('Não foi possível carregar'); });
@@ -138,6 +153,8 @@ export default function Workspace({ user }: { user: AuthUser }) {
   const project = (id: string) => data.projects.find(p => p.id === id) || data.projects[0] || { id: '', name: 'Sem projeto', color: '#77777d', description: '' };
   const done = data.tasks.filter(t => t.status === 'Success').length;
   const openCount = data.tasks.length - done;
+  const profileName = data.profile.displayName || user.name;
+  const profileAvatar = data.profile.avatarDataUrl || asset + 'A5-avatar-paisagem.png';
 
   function navigate(label: string) { setView(label); }
   function openProject(clientId = '') { setProjectClient(clientId); setProjectDialog(true); }
@@ -201,12 +218,12 @@ export default function Workspace({ user }: { user: AuthUser }) {
       <SidebarFooter>
         <div className="focus-card"><img src={asset + 'A2-cubo.png'} alt="" /><h3>Espaço para grandes ideias.</h3><p>Um passo de cada vez.<br />Seu próximo projeto começa aqui.</p><button className="violet-button" onClick={() => navigate('Projetos')}>Explorar projetos<ArrowUpRight size={15} /></button></div>
         <button className="bottom-nav" onClick={() => navigate('Ajuda')}><CircleHelp size={17} />Ajuda e atalhos</button>
-        <DropdownMenu><DropdownMenuTrigger className="account"><img src={asset + 'A5-avatar-paisagem.png'} alt="" /><span>{user.name}<small>{user.email}</small></span><ChevronDown size={16} /></DropdownMenuTrigger><DropdownMenuContent side="top" align="start" className="account-menu"><DropdownMenuItem onClick={() => navigate('Configurações')}><User />Perfil</DropdownMenuItem><DropdownMenuItem onClick={() => navigate('Configurações')}><Settings />Configurações</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate('Ajuda')}><Command />Atalhos de teclado</DropdownMenuItem><DropdownMenuItem onClick={logout}><LogOut />Sair da conta</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+        <DropdownMenu><DropdownMenuTrigger className="account"><img src={profileAvatar} alt="" /><span>{profileName}<small>{data.profile.title || user.email}</small></span><ChevronDown size={16} /></DropdownMenuTrigger><DropdownMenuContent side="top" align="start" className="account-menu"><DropdownMenuItem onClick={() => navigate('Perfil')}><User />Perfil</DropdownMenuItem><DropdownMenuItem onClick={() => navigate('Configurações')}><Settings />Configurações</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate('Ajuda')}><Command />Atalhos de teclado</DropdownMenuItem><DropdownMenuItem onClick={logout}><LogOut />Sair da conta</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
       </SidebarFooter>
     </Sidebar>
 
     <main className="main-surface">
-      <header className="topbar"><div><SidebarTrigger className="mobile-trigger" /><LayoutDashboard size={16} /><span>Workspace</span><ChevronRight size={13} /><strong>{view}</strong></div><div><span className="save-state">{ready ? saveState : 'Carregando…'}</span><span className="topbar-divider" /><img className="avatar" src={asset + 'A4-avatar-rosa.png'} alt="Seu perfil" /></div></header>
+      <header className="topbar"><div><SidebarTrigger className="mobile-trigger" /><LayoutDashboard size={16} /><span>Workspace</span><ChevronRight size={13} /><strong>{view}</strong></div><div><span className="save-state">{ready ? saveState : 'Carregando…'}</span><span className="topbar-divider" /><button onClick={() => navigate('Perfil')} aria-label="Abrir perfil"><img className="avatar" src={profileAvatar} alt="Seu perfil" /></button></div></header>
       {view === 'Visão geral' && <Dashboard data={data} filtered={filtered} done={done} openCount={openCount} project={project} onNavigate={navigate} onNewTask={() => openTask()} onOpenTask={openTask} onComplete={completeTask} onNewProject={() => openProject()} />}
       {view === 'CRM' && <CRMView data={data} onCommit={commit} />}
       {view === 'Clientes' && <ClientsView data={data} onCommit={commit} onNewProject={openProject} />}
@@ -217,7 +234,8 @@ export default function Workspace({ user }: { user: AuthUser }) {
       {view === 'Conhecimento' && <KnowledgeView data={data} onCommit={commit} />}
       {view === 'Busca' && <SearchView data={data} query={query} setQuery={setQuery} onNavigate={navigate} />}
       {view === 'Ajuda' && <SimpleView title="Ajuda e atalhos" text="Use a navegação lateral para alternar entre tarefas, projetos, calendário e arquivos. Pressione ⌘ K para começar uma busca." icon={CircleHelp} />}
-      {view === 'Configurações' && <SimpleView title="Configurações" text="Seu workspace é privado e salva as mudanças automaticamente. Novas preferências aparecerão aqui." icon={Settings} />}
+      {view === 'Perfil' && <ProfileView data={data} user={user} onCommit={commit} />}
+      {view === 'Configurações' && <SettingsView data={data} onCommit={commit} />}
     </main>
 
     <TaskDialog open={taskDialog} task={editingTask} projects={data.projects} onClose={() => setTaskDialog(false)} onSave={saveTask} />

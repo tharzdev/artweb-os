@@ -21,4 +21,4 @@ O sistema preserva a linguagem atual: fundo `#1B1B1D`, sidebar `#161616`, superf
 - foco: contorno violeta de 2 px;
 - alvos interativos: mínimo de 40 px em telas móveis.
 
-Dark mode permanece padrão. Light mode será derivado dos mesmos tokens, sem alterar semântica ou estrutura.
+Dark mode permanece padrão. Light mode e preferência do sistema usam os mesmos tokens, sem alterar semântica ou estrutura. O usuário também pode escolher cor de destaque e densidade da interface.
