@@ -42,13 +42,13 @@ export default function AuthShell() {
     } finally { setBusy(false); }
   }
 
-  if (checking) return <div className="auth-loading"><span className="brand-mark">a</span><strong>artweb<span>.so</span></strong></div>;
+  if (checking) return <div className="auth-loading"><span className="brand-logo brand-logo-loading"><img src="/assets/artweb-logo.png" alt="ArtWeb OS" /></span></div>;
   if (user) return <Workspace user={user} />;
 
   return <main className="auth-page">
     <div className="auth-frame" data-mode={mode}>
       <section className="auth-form-side">
-        <div className="auth-symbol" aria-label="ArtWeb OS"><span /></div>
+        <span className="brand-logo auth-brand-logo"><img src="/assets/artweb-logo.png" alt="ArtWeb OS" /></span>
         <div className="auth-card">
           {mode === 'register' && <div className="auth-mode-heading"><span>PRIMEIRO ACESSO</span><h2>Crie sua conta</h2><p>Seu workspace começa vazio e fica ligado ao seu e-mail.</p></div>}
           {notice && <div className="auth-notice"><Check />{notice}</div>}
@@ -61,7 +61,7 @@ export default function AuthShell() {
           </form>
           <div className="auth-switch">{mode === 'login' ? 'Ainda não tem uma conta?' : 'Já criou sua conta?'} <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setNotice(''); }}>{mode === 'login' ? 'Cadastre-se' : 'Fazer login'}</button></div>
           <div className="auth-trust"><span />acesso seguro<span /></div>
-          <div className="auth-system-label"><span className="auth-system-mark">a</span>ArtWeb OS</div>
+          <div className="auth-system-label"><span className="brand-logo brand-logo-system"><img src="/assets/artweb-logo.png" alt="" /></span>ArtWeb OS</div>
         </div>
       </section>
       <aside className="auth-showcase" aria-hidden="true">

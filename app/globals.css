@@ -69,3 +69,15 @@
 @media(max-width:900px){.auth-page{padding:22px}.auth-frame{width:min(540px,100%);height:min(760px,calc(100vh - 44px));min-height:620px;display:block;border-width:7px}.auth-showcase{display:none}.auth-form-side{height:100%}.auth-symbol{top:11%}.auth-card{top:29%;max-width:calc(100% - 40px)}.auth-frame[data-mode=register] .auth-card{top:19%}}
 @media(max-width:480px){.auth-page{padding:0;background:#0f0f0f}.auth-frame{width:100%;height:100vh;min-height:620px;border:0}.auth-symbol{top:9%;width:62px;height:62px;border-width:6px}.auth-symbol:after{top:24px;width:61px;height:6px}.auth-symbol span{inset:-6px;border-width:6px}.auth-card{top:25%;width:min(322px,calc(100% - 36px));max-width:none}.auth-frame[data-mode=register] .auth-card{top:16%}.auth-form label{font-size:13px}.auth-form label>div{height:48px}.auth-submit{height:48px}.auth-trust{margin-top:30px}}
 @media(prefers-reduced-motion:reduce){.auth-pixel-cube,.auth-cube-glow{animation:none}}
+
+/* Master ArtWeb logo supplied by the product owner. */
+.brand-logo{position:relative;display:inline-block;overflow:hidden;flex:0 0 auto;background:transparent}
+.brand-logo img{position:absolute;left:50%;top:50%;width:215%;height:auto;max-width:none;transform:translate(-50%,-50%);object-fit:contain;mix-blend-mode:screen}
+.brand-logo-sidebar{width:108px;height:43px;margin-left:-4px}
+.auth-brand-logo{position:absolute;z-index:2;top:15.8%;left:50%;width:124px;height:68px;transform:translateX(-50%)}
+.brand-logo-loading{width:130px;height:66px}
+.brand-logo-system{width:39px;height:21px}
+.auth-loading{background:#0f0f0f}
+@media(max-width:900px){.auth-brand-logo{top:10%;width:116px;height:64px}}
+@media(max-width:480px){.auth-brand-logo{top:8%;width:108px;height:60px}}
+[data-theme=light] .brand-logo{background:#000}[data-theme=light] .brand-logo img{mix-blend-mode:normal}

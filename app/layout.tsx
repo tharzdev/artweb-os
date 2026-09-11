@@ -8,8 +8,9 @@ export const metadata: Metadata = {
     "codex-preview": "development",
   },
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/assets/artweb-logo.png",
+    shortcut: "/assets/artweb-logo.png",
+    apple: "/assets/artweb-logo.png",
   },
 };
 

@@ -204,7 +204,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
   return <SidebarProvider style={{ '--sidebar-width': '258px' } as React.CSSProperties}>
     <Sidebar className="app-sidebar">
       <SidebarHeader>
-        <div className="brand"><span className="brand-mark">a</span><strong>artweb<span>.so</span></strong><SidebarTrigger className="collapse-button" /></div>
+        <div className="brand"><span className="brand-logo brand-logo-sidebar"><img src="/assets/artweb-logo.png" alt="ArtWeb OS" /></span><SidebarTrigger className="collapse-button" /></div>
         <div className="workspace-switch"><span className="workspace-icon">A</span><span>Meu workspace<small>Workspace pessoal</small></span><ChevronDown size={15} /></div>
         <label className="side-search"><Search size={17} /><input aria-label="Buscar no workspace" placeholder="Buscar..." value={query} onFocus={()=>setView('Busca')} onChange={e => { setQuery(e.target.value); setView('Busca'); }} /><kbd>⌘ K</kbd></label>
       </SidebarHeader>
