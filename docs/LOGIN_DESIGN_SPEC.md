@@ -55,9 +55,15 @@ As cores foram amostradas diretamente da imagem: o fundo externo tem mediana RGB
 
 ## Arte do painel direito
 
-O painel usa a própria referência como fonte visual para manter os pontos, as colunas, o contraste e a textura. A imagem é ampliada verticalmente em 150 px, deslocada 76 px para cima e 78 px para a direita. Esse recorte elimina o formulário original e as margens externas da referência, preservando apenas a área arquitetônica.
+O painel usa um cubo isométrico criado especificamente para o ArtWeb OS. Ele preserva o desenho monocromático formado por micro-pixels, pontos e linhas fragmentadas da referência, sem reaproveitar qualquer parte do formulário original.
 
-Arquivo usado pelo produto: `public/assets/login-reference.png`.
+O cubo gira continuamente no próprio centro em um ciclo linear de **22 segundos**, com uma variação de escala entre **96% e 102,5%**. Dois círculos muito sutis e uma grade de 52 px dão profundidade ao painel. A preferência do sistema por movimento reduzido desativa a animação.
+
+Arquivo usado pelo produto: `public/assets/pixel-cube.png`.
+
+### Prompt do cubo
+
+> Crie um único cubo isométrico isolado, desenhado inteiramente com micro-pixels brancos, pontos pontilhistas e linhas finas fragmentadas. O cubo deve ser tridimensional, técnico e elegante, com faces superior, esquerda e direita visíveis e geometria equilibrada para girar no próprio eixo. Use apenas branco e cinza-claro. Centralize o cubo em uma tela quadrada, com bastante respiro e fundo realmente transparente. Não inclua interface, formulário, colunas, arquitetura, moldura, logotipo, letras, texto, sombra, marca-d'água ou retângulo preto.
 
 ## Comportamento
 

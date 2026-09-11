@@ -36,9 +36,15 @@
 .auth-page{min-height:100vh;display:grid;grid-template-columns:1fr;place-items:center;padding:7.2vh 5.45vw;background:#0b0b0b;color:#f7f7f7;overflow:auto}
 .auth-frame{width:89.1vw;max-width:1295px;height:min(925px,85.6vh);min-height:600px;display:grid;grid-template-columns:43.7% 56.3%;overflow:hidden;border:9px solid #222121;background:#0f0f0f;box-shadow:0 32px 90px #0008}
 .auth-form-side{position:relative;display:block;padding:0;background:radial-gradient(circle at 56% 47%,#171717 0,#0f0f0f 68%)}
-.auth-showcase{position:relative;display:block;padding:0;border:0;background:#0f0f0f;overflow:hidden}
+.auth-showcase{position:relative;display:block;padding:0;border:0;background:radial-gradient(circle at 50% 50%,#252525 0,#141414 31%,#0f0f0f 65%),linear-gradient(#0f0f0f,#0f0f0f);overflow:hidden;isolation:isolate}
 .auth-showcase:before{display:none}
-.auth-reference-image{position:absolute;right:-78px;top:-76px;width:auto;max-width:none;height:calc(100% + 150px);object-fit:contain;filter:grayscale(1) contrast(1.03);pointer-events:none;user-select:none}
+.auth-showcase:after{content:"";position:absolute;z-index:-2;inset:0;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:52px 52px;mask-image:radial-gradient(circle,#000 0,transparent 72%)}
+.auth-cube-stage{position:absolute;left:50%;top:50%;width:min(74%,610px);aspect-ratio:1;transform:translate(-50%,-50%);display:grid;place-items:center;filter:drop-shadow(0 0 34px #ffffff13)}
+.auth-pixel-cube{position:relative;z-index:2;width:100%;height:100%;object-fit:contain;animation:auth-cube-spin 22s linear infinite;transform-origin:50% 50%;will-change:transform;pointer-events:none;user-select:none}
+.auth-cube-glow{position:absolute;z-index:1;inset:23%;border-radius:50%;background:#fff;filter:blur(100px);opacity:.055;animation:auth-cube-breathe 5.5s ease-in-out infinite}
+.auth-cube-orbit{position:absolute;left:50%;top:50%;border:1px solid #ffffff10;border-radius:50%;transform:translate(-50%,-50%) rotate(-18deg);box-shadow:inset 0 0 30px #ffffff05}.auth-cube-orbit-large{width:78%;aspect-ratio:1}.auth-cube-orbit-small{width:58%;aspect-ratio:1;transform:translate(-50%,-50%) rotate(27deg)}
+@keyframes auth-cube-spin{0%{transform:rotate(0deg) scale(.96)}50%{transform:rotate(180deg) scale(1.025)}100%{transform:rotate(360deg) scale(.96)}}
+@keyframes auth-cube-breathe{0%,100%{opacity:.035;transform:scale(.82)}50%{opacity:.08;transform:scale(1.08)}}
 .auth-symbol{position:absolute;z-index:2;top:16.9%;left:50%;width:70px;height:70px;transform:translateX(-50%);border:7px solid #f7f7f7;border-radius:50%}
 .auth-symbol:after{content:"";position:absolute;left:-5px;top:26px;width:69px;height:7px;border-radius:8px;background:#f7f7f7;transform:rotate(-31deg);transform-origin:center}
 .auth-symbol span{position:absolute;inset:-7px;border-radius:50%;clip-path:polygon(55% 0,100% 0,100% 44%,45% 44%);border:7px solid #f7f7f7;transform:rotate(17deg)}
@@ -62,3 +68,4 @@
 .auth-error,.auth-notice{margin:0 0 15px;padding:10px 12px;border-radius:0;font-size:11px;line-height:1.45}.auth-error{border:1px solid #773c36;background:#452320;color:#f0a69f}.auth-notice{display:flex;align-items:center;gap:8px;border:1px solid #3a6043;background:#223b28;color:#a8d3b0}.auth-notice svg{width:15px}
 @media(max-width:900px){.auth-page{padding:22px}.auth-frame{width:min(540px,100%);height:min(760px,calc(100vh - 44px));min-height:620px;display:block;border-width:7px}.auth-showcase{display:none}.auth-form-side{height:100%}.auth-symbol{top:11%}.auth-card{top:29%;max-width:calc(100% - 40px)}.auth-frame[data-mode=register] .auth-card{top:19%}}
 @media(max-width:480px){.auth-page{padding:0;background:#0f0f0f}.auth-frame{width:100%;height:100vh;min-height:620px;border:0}.auth-symbol{top:9%;width:62px;height:62px;border-width:6px}.auth-symbol:after{top:24px;width:61px;height:6px}.auth-symbol span{inset:-6px;border-width:6px}.auth-card{top:25%;width:min(322px,calc(100% - 36px));max-width:none}.auth-frame[data-mode=register] .auth-card{top:16%}.auth-form label{font-size:13px}.auth-form label>div{height:48px}.auth-submit{height:48px}.auth-trust{margin-top:30px}}
+@media(prefers-reduced-motion:reduce){.auth-pixel-cube,.auth-cube-glow{animation:none}}

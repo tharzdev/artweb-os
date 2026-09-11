@@ -65,7 +65,12 @@ export default function AuthShell() {
         </div>
       </section>
       <aside className="auth-showcase" aria-hidden="true">
-        <img src="/assets/login-reference.png" alt="" className="auth-reference-image" />
+        <div className="auth-cube-orbit auth-cube-orbit-large" />
+        <div className="auth-cube-orbit auth-cube-orbit-small" />
+        <div className="auth-cube-stage">
+          <span className="auth-cube-glow" />
+          <img src="/assets/pixel-cube.png" alt="" className="auth-pixel-cube" />
+        </div>
       </aside>
     </div>
   </main>;
