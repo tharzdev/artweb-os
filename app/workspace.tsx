@@ -19,11 +19,11 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
 import { emptyData, normalizeData, statusLabels, statuses, type Activity, type Client, type Data, type Note, type Project, type Task } from '@/lib/model';
 import type { AuthUser } from '@/lib/auth';
-import { ClientsView, CommandPalette, CRMView, KnowledgeView, OperationsStrip, SearchView } from '@/components/os/business-modules';
+import { ClientsView, CommandPalette, CRMView, KnowledgeView, SearchView } from '@/components/os/business-modules';
 import { ProfileView, SettingsView } from '@/components/os/settings-modules';
+import { AgentChatView, type ConversationSummary } from '@/components/os/agent-chat';
 
 const asset = '/assets/';
 const nav = [
@@ -42,10 +42,6 @@ export function Status({ value }: { value: string }) {
   return <span className={'status status-' + value.replace(' ', '-').toLowerCase()}><Icon size={13} />{statusLabels[value] || value}</span>;
 }
 
-function todayLabel() {
-  return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' }).format(new Date()).toUpperCase();
-}
-
 export default function Workspace({ user }: { user: AuthUser }) {
   const [view, setView] = useState('Visão geral');
   const [query, setQuery] = useState('');
@@ -59,6 +55,9 @@ export default function Workspace({ user }: { user: AuthUser }) {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [selectedNote, setSelectedNote] = useState('');
   const [noteDraft, setNoteDraft] = useState('');
+  const [chatConversations, setChatConversations] = useState<ConversationSummary[]>([]);
+  const [chatConversationId, setChatConversationId] = useState<string | null>(null);
+  const [chatResetToken, setChatResetToken] = useState(0);
   const dataRef = useRef(data);
 
   useEffect(() => { dataRef.current = data; }, [data]);
@@ -214,6 +213,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
         <div className="sidebar-divider" />
         <div className="nav-label">SEUS PROJETOS <button aria-label="Novo projeto" onClick={() => openProject()}><Plus size={13} /></button></div>
         <div className="project-nav">{data.projects.map(p => <button key={p.id} onClick={() => navigate('Projetos')}><span className="project-dot" style={{ background: p.color }} />{p.name}<ChevronRight size={13} /></button>)}</div>
+        {view === 'Visão geral' && <><div className="sidebar-divider"/><div className="nav-label">CONVERSAS <button aria-label="Nova conversa" onClick={()=>{setChatConversationId(null);setChatResetToken(value=>value+1)}}><Plus size={13}/></button></div><div className="chat-side-history">{chatConversations.length?chatConversations.slice(0,8).map(item=><button className={chatConversationId===item.id?'active':''} onClick={()=>setChatConversationId(item.id)} title={item.title} key={item.id}><MessageCircle/>{item.title}</button>):<span>Suas conversas aparecerão aqui.</span>}</div></>}
       </SidebarContent>
       <SidebarFooter>
         <div className="focus-card"><img src={asset + 'A2-cubo.png'} alt="" /><h3>Espaço para grandes ideias.</h3><p>Um passo de cada vez.<br />Seu próximo projeto começa aqui.</p><button className="violet-button" onClick={() => navigate('Projetos')}>Explorar projetos<ArrowUpRight size={15} /></button></div>
@@ -224,7 +224,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
 
     <main className="main-surface">
       <header className="topbar"><div><SidebarTrigger className="mobile-trigger" /><LayoutDashboard size={16} /><span>Workspace</span><ChevronRight size={13} /><strong>{view}</strong></div><div><span className="save-state">{ready ? saveState : 'Carregando…'}</span><span className="topbar-divider" /><button onClick={() => navigate('Perfil')} aria-label="Abrir perfil"><img className="avatar" src={profileAvatar} alt="Seu perfil" /></button></div></header>
-      {view === 'Visão geral' && <Dashboard data={data} filtered={filtered} done={done} openCount={openCount} project={project} onNavigate={navigate} onNewTask={() => openTask()} onOpenTask={openTask} onComplete={completeTask} onNewProject={() => openProject()} />}
+      {view === 'Visão geral' && <AgentChatView data={data} selectedId={chatConversationId} resetToken={chatResetToken} onSelect={setChatConversationId} onHistoryChange={setChatConversations} onNavigate={navigate}/>}
       {view === 'CRM' && <CRMView data={data} onCommit={commit} />}
       {view === 'Clientes' && <ClientsView data={data} onCommit={commit} onNewProject={openProject} />}
       {view === 'Tarefas' && <TasksView filtered={filtered} project={project} onNew={() => openTask()} onOpen={openTask} onComplete={completeTask} />}
@@ -246,35 +246,6 @@ export default function Workspace({ user }: { user: AuthUser }) {
 
 function PageHeading({ eyebrow, title, detail, action }: { eyebrow: string; title: string; detail: string; action?: React.ReactNode }) {
   return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}<span className="wave">✳</span></h1><p>{detail}</p></div>{action}</div>;
-}
-
-function Dashboard({ data, filtered, done, openCount, project, onNavigate, onNewTask, onOpenTask, onComplete, onNewProject }: { data: Data; filtered: Task[]; done: number; openCount: number; project: (id: string) => Project; onNavigate: (v: string) => void; onNewTask: () => void; onOpenTask: (t: Task) => void; onComplete: (t: Task) => void; onNewProject: () => void }) {
-  return <div className="page-content"><PageHeading eyebrow={todayLabel()} title="Bom trabalho começa aqui" detail={`${openCount} tarefas em aberto · ${data.projects.length} projetos em movimento`} action={<button className="violet-button" onClick={onNewTask}><Plus size={17} />Nova tarefa</button>} />
-    <div className="quick-actions"><span>CRIAR</span><button onClick={()=>onNavigate('CRM')}><Plus/>Lead</button><button onClick={()=>onNavigate('Clientes')}><Plus/>Cliente</button><button onClick={onNewProject}><Plus/>Projeto</button><button onClick={onNewTask}><Plus/>Tarefa</button><button onClick={()=>onNavigate('Conhecimento')}><Plus/>Nota</button><button onClick={()=>onNavigate('Conhecimento')}><Plus/>Ideia</button></div>
-    <OperationsStrip data={data} onNavigate={onNavigate} />
-    <div className="stats-grid">{[
-      { label: 'Total de projetos', value: data.projects.length, img: 'A3-kpi-1.png', sub: 'Todas as suas ideias, organizadas' },
-      { label: 'Tarefas em aberto', value: openCount, img: 'A3-kpi-2.png', sub: 'Um próximo passo para cada projeto' },
-      { label: 'Em revisão', value: data.tasks.filter(t => t.status === 'In review').length, img: 'A3-kpi-3.png', sub: 'Prontas para um novo olhar' },
-      { label: 'Concluídas', value: done, img: 'A3-kpi-2.png', sub: 'Progresso que faz a diferença' },
-    ].map(s => <section className="stat-card" key={s.label}><p>{s.label}</p><strong>{String(s.value).padStart(2, '0')}</strong><img src={asset + s.img} alt="" /><small>{s.sub}</small></section>)}</div>
-    <div className="overview-grid"><section className="panel tasks-panel"><div className="panel-heading"><h2>Suas próximas tarefas <span>{openCount}</span></h2><button className="text-action" onClick={() => onNavigate('Tarefas')}>Ver todas<ArrowUpRight size={14} /></button></div><TaskTable tasks={filtered.filter(t => t.status !== 'Success').slice(0, 5)} project={project} onOpen={onOpenTask} onComplete={onComplete} /></section><Performance data={data} /></div>
-    <div className="dashboard-bottom"><section className="panel projects-panel"><div className="panel-heading"><h2>Seus projetos</h2><button className="subtle-button" onClick={onNewProject}><Plus size={14} />Novo projeto</button></div><ProjectsTable data={data} /></section><section className="panel activity-panel"><div className="panel-heading"><h2>Atividade recente</h2><span>{data.activities.length}</span></div>{data.activities.length?<div className="activity-list">{data.activities.slice(0,6).map(item=><div key={item.id}><i/><p>{item.description}<time>{new Date(item.created).toLocaleString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</time></p></div>)}</div>:<div className="empty-table">As ações importantes aparecerão aqui.</div>}</section></div>
-    <footer className="page-footer"><span>Um pouco de foco. Muito espaço para criar.</span><span>artweb.so</span></footer>
-  </div>;
-}
-
-function TaskTable({ tasks, project, onOpen, onComplete }: { tasks: Task[]; project: (id: string) => Project; onOpen: (t: Task) => void; onComplete: (t: Task) => void }) {
-  return <Table><TableHeader><TableRow><TableHead>Tarefa</TableHead><TableHead>Projeto</TableHead><TableHead>Status</TableHead><TableHead>Prazo</TableHead></TableRow></TableHeader><TableBody>{tasks.length === 0 ? <TableRow><TableCell colSpan={4}><div className="empty-table">Nenhuma tarefa ainda. Crie um projeto para começar.</div></TableCell></TableRow> : tasks.map(t => <TableRow key={t.id} onDoubleClick={() => onOpen(t)}><TableCell><div className="task-name"><button className={'empty-check ' + (t.status === 'Success' ? 'checked' : '')} aria-label="Alternar conclusão" onClick={() => onComplete(t)} />{t.title}</div></TableCell><TableCell><span className="project-name"><Folder size={16} fill={project(t.project).color} color={project(t.project).color} />{project(t.project).name}</span></TableCell><TableCell><Status value={t.status} /></TableCell><TableCell><button className="date-cell" onClick={() => onOpen(t)}>{new Date(t.due + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</button></TableCell></TableRow>)}</TableBody></Table>;
-}
-
-function Performance({ data }: { data: Data }) {
-  const done = data.tasks.filter(t => t.status === 'Success').length;
-  return <section className="panel performance"><div className="panel-heading"><h2>Progresso dos projetos</h2><ArrowUpRight size={16} /></div><div className="performance-value">{Math.round(done / Math.max(data.tasks.length, 1) * 100)}<span>%</span><small>das tarefas concluídas</small></div><div className="bar-chart">{data.projects.slice(0, 5).map(p => { const ts = data.tasks.filter(t => t.project === p.id); const count = ts.filter(t => t.status === 'Success').length; return <div className="bar-group" key={p.id}><div className="bar-track"><div style={{ height: `${count / Math.max(ts.length, 1) * 100}%` }} /><span>{count}/{ts.length}</span></div><small>{p.name.split(' ')[0]}</small></div>; })}</div></section>;
-}
-
-function ProjectsTable({ data }: { data: Data }) {
-  return <Table><TableHeader><TableRow><TableHead>Nome do projeto</TableHead><TableHead>Status</TableHead><TableHead>Progresso</TableHead><TableHead>Tarefas</TableHead><TableHead>Responsável</TableHead></TableRow></TableHeader><TableBody>{data.projects.length === 0 ? <TableRow><TableCell colSpan={5}><div className="empty-table">Seu workspace está vazio. Crie o primeiro projeto.</div></TableCell></TableRow> : data.projects.map(p => { const ts = data.tasks.filter(t => t.project === p.id); const completed = ts.filter(t => t.status === 'Success').length; const pct = Math.round(completed / Math.max(ts.length, 1) * 100); return <TableRow key={p.id}><TableCell><span className="project-name"><Folder size={19} fill={p.color} color={p.color} />{p.name}</span></TableCell><TableCell><Status value={pct === 100 && ts.length > 0 ? 'Success' : 'In progress'} /></TableCell><TableCell><div className="progress-cell"><div className="segmented"><i style={{ width: pct + '%', background: p.color }} /></div>{pct}%</div></TableCell><TableCell>{completed}<span className="muted"> / {ts.length}</span></TableCell><TableCell><span className="owner"><img src={asset + 'A4-avatar-rosa.png'} alt="" />Você</span></TableCell></TableRow>; })}</TableBody></Table>;
 }
 
 function TasksView({ filtered, project, onNew, onOpen, onComplete }: { filtered: Task[]; project: (id: string) => Project; onNew: () => void; onOpen: (t: Task) => void; onComplete: (t: Task) => void }) {
