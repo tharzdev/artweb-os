@@ -1,8 +1,8 @@
 # ArtWeb OS — Especificação da ferramenta de prospecção
 
-**Status:** planejamento aprovado para discussão  
-**Implementação:** não iniciada  
-**Integrações externas:** não configuradas
+**Status:** primeira versão implementada em 12 de setembro de 2026
+**Implementação:** interface, credencial protegida, busca, filtros, histórico e importação para o CRM
+**Integração externa:** pronta para ser ativada por cada usuário com sua chave do Google Places
 
 ## 1. Objetivo
 
@@ -251,9 +251,9 @@ Referências oficiais:
 - [Campos de dados do Places](https://developers.google.com/maps/documentation/places/web-service/data-fields)
 - [Boas práticas para proteção de chaves](https://developers.google.com/maps/api-security-best-practices)
 
-## 13. Estrutura técnica planejada
+## 13. Estrutura técnica
 
-Nenhum item desta seção foi implementado.
+Os itens principais desta seção já fazem parte da primeira versão funcional.
 
 ### Armazenamento
 
@@ -307,4 +307,3 @@ A ferramenta estará pronta quando:
 - proteger a credencial da fonte;
 - funcionar em desktop, aplicativo e telas móveis;
 - manter o padrão visual preto, cinza e branco do ArtWeb OS.
-

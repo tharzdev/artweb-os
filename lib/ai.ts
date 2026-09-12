@@ -23,6 +23,17 @@ async function encryptionKey(){
   return crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']);
 }
 
+export async function encryptScopedSecret(value:string,ownerId:string,scope:string){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:new TextEncoder().encode(`${ownerId}:${scope}`)},await encryptionKey(),new TextEncoder().encode(value));
+  return {ciphertext:bytesToBase64(new Uint8Array(ciphertext)),iv:bytesToBase64(iv)};
+}
+
+export async function decryptScopedSecret(ciphertext:string,iv:string,ownerId:string,scope:string){
+  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:base64ToBytes(iv),additionalData:new TextEncoder().encode(`${ownerId}:${scope}`)},await encryptionKey(),base64ToBytes(ciphertext));
+  return new TextDecoder().decode(plain);
+}
+
 export async function encryptApiKey(value:string,ownerId:string,provider:AIProvider){
   const iv=crypto.getRandomValues(new Uint8Array(12));
   const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:new TextEncoder().encode(`${ownerId}:${provider}`)},await encryptionKey(),new TextEncoder().encode(value));
