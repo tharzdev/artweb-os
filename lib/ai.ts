@@ -80,9 +80,12 @@ function providerError(status:number,detail:string){
   if(status===401||status===403)return 'A chave foi recusada pelo provedor.';
   if(status===429)return 'O limite de uso dessa API foi atingido.';
   if(status===404)return 'O endpoint ou modelo informado não foi encontrado.';
+  if(status===503)return 'O provedor ficou temporariamente indisponível (erro 503). O ArtWeb tentou novamente automaticamente; tente outra vez ou escolha outro modelo nas configurações.';
   try{const parsed=JSON.parse(detail) as {error?:{message?:string}|string};const message=typeof parsed.error==='string'?parsed.error:parsed.error?.message;if(message)return message.slice(0,240)}catch{}
   return `O provedor respondeu com erro ${status}.`;
 }
+
+function pause(ms:number){return new Promise(resolve=>setTimeout(resolve,ms))}
 
 function clip(value:string,size=900){return value.replace(/\s+/g,' ').trim().slice(0,size)}
 function terms(value:string){return [...new Set(value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').split(/[^a-z0-9]+/).filter(term=>term.length>2))]}
@@ -112,7 +115,7 @@ async function* sseData(response:Response){
   while(true){const {done,value}=await reader.read();buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});const blocks=buffer.split(/\r?\n\r?\n/);buffer=blocks.pop()||'';for(const block of blocks){for(const line of block.split(/\r?\n/)){if(line.startsWith('data:')){const value=line.slice(5).trim();if(value&&value!=='[DONE]')yield value}}}if(done)break}
 }
 
-export async function* streamProvider(input:{provider:AIProvider;apiKey:string;endpoint:string;model:string;messages:AIMessage[];context:string;signal:AbortSignal}){
+export async function* streamProvider(input:{provider:AIProvider;apiKey:string;endpoint:string;model:string;messages:AIMessage[];context:string;signal:AbortSignal;onStatus?:(label:string)=>void}){
   const promptContext=input.context?`\n\nContexto autorizado do workspace:\n${input.context}`:'';
   if(input.provider==='openai'){
     const response=await providerFetch('openai',input.apiKey,input.endpoint,'/responses',{method:'POST',signal:input.signal,body:JSON.stringify({model:input.model,instructions:systemInstruction+promptContext,input:input.messages,stream:true})});
@@ -126,10 +129,25 @@ export async function* streamProvider(input:{provider:AIProvider;apiKey:string;e
   }
   if(input.provider==='gemini'){
     const contents=input.messages.map(message=>({role:message.role==='assistant'?'model':'user',parts:[{text:message.content}]}));
-    const path=`/models/${encodeURIComponent(input.model)}:streamGenerateContent?alt=sse`;
-    const response=await providerFetch('gemini',input.apiKey,input.endpoint,path,{method:'POST',signal:input.signal,body:JSON.stringify({systemInstruction:{parts:[{text:systemInstruction+promptContext}]},contents})});
-    for await(const raw of sseData(response)){const event=JSON.parse(raw) as {candidates?:Array<{content?:{parts?:Array<{text?:string}>}}>};const text=event.candidates?.[0]?.content?.parts?.map(part=>part.text||'').join('');if(text)yield text}
-    return;
+    const requestBody=JSON.stringify({systemInstruction:{parts:[{text:systemInstruction+promptContext}]},contents});
+    const fallbackModels=input.model.includes('flash')?[...new Set(['gemini-3.6-flash','gemini-3.5-flash-lite'].filter(model=>model!==input.model))]:[];
+    const models=[input.model,...fallbackModels];let lastStatus=503;let lastDetail='';
+    for(let modelIndex=0;modelIndex<models.length;modelIndex++){
+      const model=models[modelIndex];const attempts=modelIndex===0?3:1;
+      if(modelIndex>0)input.onStatus?.(`Tentando o modelo alternativo ${model}…`);
+      for(let attempt=0;attempt<attempts;attempt++){
+        const path=`/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
+        const response=await providerFetch('gemini',input.apiKey,input.endpoint,path,{method:'POST',signal:input.signal,body:requestBody});
+        if(response.ok){
+          for await(const raw of sseData(response)){const event=JSON.parse(raw) as {candidates?:Array<{content?:{parts?:Array<{text?:string}>}}>};const text=event.candidates?.[0]?.content?.parts?.map(part=>part.text||'').join('');if(text)yield text}
+          return;
+        }
+        lastStatus=response.status;lastDetail=await response.text().catch(()=> '');
+        if(![500,502,503,504].includes(response.status))throw new Error(providerError(response.status,lastDetail));
+        if(attempt<attempts-1){input.onStatus?.(`Gemini indisponível. Nova tentativa ${attempt+2} de ${attempts}…`);await pause(500*(2**attempt))}
+      }
+    }
+    throw new Error(providerError(lastStatus,lastDetail));
   }
   const base=input.endpoint.endsWith('/v1')?input.endpoint:`${input.endpoint}/v1`;
   const response=await providerFetch('compatible',input.apiKey,base,'/chat/completions',{method:'POST',signal:input.signal,body:JSON.stringify({model:input.model,messages:[{role:'system',content:systemInstruction+promptContext},...input.messages],stream:true})});
