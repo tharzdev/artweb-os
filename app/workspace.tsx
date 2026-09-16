@@ -24,6 +24,7 @@ import type { AuthUser } from '@/lib/auth';
 import { ClientsView, CommandPalette, CRMView, KnowledgeView, SearchView } from '@/components/os/business-modules';
 import { ProfileView, SettingsView } from '@/components/os/settings-modules';
 import { AgentChatView, type ConversationSummary } from '@/components/os/agent-chat';
+import { ProjectDetailView } from '@/components/os/project-workspace';
 
 const asset = '/assets/';
 const nav = [
@@ -55,6 +56,8 @@ export default function Workspace({ user }: { user: AuthUser }) {
   const [taskDialog, setTaskDialog] = useState(false);
   const [projectDialog, setProjectDialog] = useState(false);
   const [projectClient, setProjectClient] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [taskProject, setTaskProject] = useState('');
   const [commandOpen, setCommandOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [selectedNote, setSelectedNote] = useState('');
@@ -214,11 +217,13 @@ export default function Workspace({ user }: { user: AuthUser }) {
   const profileName = data.profile.displayName || user.name;
   const profileAvatar = data.profile.avatarDataUrl || asset + 'A5-avatar-paisagem.png';
 
-  function navigate(label: string) { setView(label); }
+  function navigate(label: string) { setView(label); if (label !== 'Projetos') setSelectedProjectId(null); }
+  function openProjects() { setSelectedProjectId(null); setView('Projetos'); }
+  function openProjectWorkspace(id: string) { setSelectedProjectId(id); setView('Projetos'); }
   function openProject(clientId = '') { setProjectClient(clientId); setProjectDialog(true); }
-  function openTask(task?: Task) {
+  function openTask(task?: Task, projectId = '') {
     if (!task && !data.projects.length) { setProjectDialog(true); return; }
-    setEditingTask(task || null); setTaskDialog(true);
+    setEditingTask(task || null); setTaskProject(task?.project || projectId); setTaskDialog(true);
   }
   function saveTask(form: FormData) {
     const task: Task = {
@@ -235,13 +240,13 @@ export default function Workspace({ user }: { user: AuthUser }) {
     if (!task.title) return;
     const tasks = editingTask ? data.tasks.map(t => t.id === task.id ? task : t) : [task, ...data.tasks];
     const log: Activity = { id: crypto.randomUUID(), type: editingTask ? 'task.updated' : 'task.created', entityType: 'task', entityId: task.id, description: `Tarefa “${task.title}” ${editingTask ? 'atualizada' : 'criada'}.`, created: new Date().toISOString() };
-    void commit({ ...data, tasks, activities: [log, ...data.activities] }); setTaskDialog(false); setEditingTask(null);
+    void commit({ ...data, tasks, activities: [log, ...data.activities] }); setTaskDialog(false); setEditingTask(null); setTaskProject('');
   }
   function saveProject(form: FormData) {
     const name = String(form.get('name') || '').trim(); if (!name) return;
     const next: Project = { id: crypto.randomUUID(), name, description: String(form.get('description') || ''), color: String(form.get('color') || '#d8d8d8'), clientId: String(form.get('clientId') || '') || undefined, status: String(form.get('status') || 'Planejamento'), priority: String(form.get('priority') || 'Média'), due: String(form.get('due') || ''), technologies: String(form.get('technologies') || '').split(',').map(v => v.trim()).filter(Boolean), tags: String(form.get('tags') || '').split(',').map(v => v.trim()).filter(Boolean) };
     const log: Activity = { id: crypto.randomUUID(), type: 'project.created', entityType: 'project', entityId: next.id, description: `Projeto “${name}” criado.`, created: new Date().toISOString() };
-    void commit({ ...data, projects: [...data.projects, next], activities: [log, ...data.activities] }); setProjectDialog(false); setProjectClient('');
+    void commit({ ...data, projects: [...data.projects, next], activities: [log, ...data.activities] }); setProjectDialog(false); setProjectClient(''); setSelectedProjectId(next.id); setView('Projetos');
   }
   function completeTask(task: Task) { const completed=task.status!=='Success'; const log:Activity={id:crypto.randomUUID(),type:completed?'task.completed':'task.reopened',entityType:'task',entityId:task.id,description:`Tarefa “${task.title}” ${completed?'concluída':'reaberta'}.`,created:new Date().toISOString()}; void commit({ ...data, tasks: data.tasks.map(t => t.id === task.id ? { ...t, status: completed ? 'Success' : 'Pending' } : t), activities:[log,...data.activities] }); }
   function saveNote() {
@@ -266,14 +271,14 @@ export default function Workspace({ user }: { user: AuthUser }) {
       </SidebarHeader>
       <SidebarContent>
         <div className="side-section-heading"><button type="button" className="side-section-toggle" aria-expanded={workspaceOpen} onClick={()=>setWorkspaceOpen(value=>!value)}><span>WORKSPACE</span><ChevronDown className={workspaceOpen?'is-open':''}/></button></div>
-        <div className={`side-section-collapse ${workspaceOpen?'is-open':''}`}><div><SidebarMenu>{nav.map(n => <SidebarMenuItem key={n.label}><SidebarMenuButton className="nav-item" isActive={view === n.label} onClick={() => navigate(n.label)}><n.icon /><span>{n.label}</span>{n.label === 'Tarefas' && <small className="nav-count">{openCount}</small>}</SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu></div></div>
+        <div className={`side-section-collapse ${workspaceOpen?'is-open':''}`}><div><SidebarMenu>{nav.map(n => <SidebarMenuItem key={n.label}><SidebarMenuButton className="nav-item" isActive={view === n.label} onClick={() => n.label === 'Projetos' ? openProjects() : navigate(n.label)}><n.icon /><span>{n.label}</span>{n.label === 'Tarefas' && <small className="nav-count">{openCount}</small>}</SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu></div></div>
         <div className="sidebar-divider" />
         <div className="side-section-heading"><button type="button" className="side-section-toggle" aria-expanded={projectsOpen} onClick={()=>setProjectsOpen(value=>!value)}><span>PROJETOS</span><ChevronDown className={projectsOpen?'is-open':''}/></button><button type="button" className="side-section-add" aria-label="Novo projeto" onClick={()=>openProject()}><Plus size={14}/></button></div>
-        <div className={`side-section-collapse ${projectsOpen?'is-open':''}`}><div><div className="project-nav">{data.projects.length?data.projects.map(p => <button key={p.id} onClick={() => navigate('Projetos')}><span className="project-dot" />{p.name}<ChevronRight size={13} /></button>):<button className="empty-project-link" onClick={()=>openProject()}><Plus/>Criar primeiro projeto</button>}</div></div></div>
+        <div className={`side-section-collapse ${projectsOpen?'is-open':''}`}><div><div className="project-nav">{data.projects.length?data.projects.map(p => <button className={selectedProjectId===p.id?'active':''} key={p.id} onClick={() => openProjectWorkspace(p.id)}><span className="project-dot" />{p.name}<ChevronRight size={13} /></button>):<button className="empty-project-link" onClick={()=>openProject()}><Plus/>Criar primeiro projeto</button>}</div></div></div>
         {view === 'Visão geral' && <><div className="sidebar-divider"/><div className="nav-label">CONVERSAS <button aria-label="Nova conversa" onClick={()=>{setChatConversationId(null);setChatResetToken(value=>value+1)}}><Plus size={13}/></button></div><div className="chat-side-history">{chatConversations.length?chatConversations.slice(0,8).map(item=><button className={chatConversationId===item.id?'active':''} onClick={()=>setChatConversationId(item.id)} title={item.title} key={item.id}><MessageCircle/>{item.title}</button>):<span>Suas conversas aparecerão aqui.</span>}</div></>}
       </SidebarContent>
       <SidebarFooter>
-        <button className="explore-projects-button" onClick={() => navigate('Projetos')}>Explorar projetos<ArrowUpRight size={15}/></button>
+        <button className="explore-projects-button" onClick={openProjects}>Explorar projetos<ArrowUpRight size={15}/></button>
         <button className="bottom-nav" onClick={() => navigate('Ajuda')}><CircleHelp size={17} />Ajuda e atalhos</button>
         <DropdownMenu><DropdownMenuTrigger className="account"><img src={profileAvatar} alt="" /><span>{profileName}<small>{data.profile.title || user.email}</small></span><ChevronDown size={16} /></DropdownMenuTrigger><DropdownMenuContent side="top" align="start" className="account-menu"><DropdownMenuItem onClick={() => navigate('Perfil')}><User />Perfil</DropdownMenuItem><DropdownMenuItem onClick={() => navigate('Configurações')}><Settings />Configurações</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate('Ajuda')}><Command />Atalhos de teclado</DropdownMenuItem><DropdownMenuItem onClick={logout}><LogOut />Sair da conta</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
       </SidebarFooter>
@@ -281,12 +286,12 @@ export default function Workspace({ user }: { user: AuthUser }) {
     </Sidebar>
 
     <main className="main-surface">
-      <header className="topbar"><div><SidebarTrigger className="sidebar-reopen" title="Abrir ou fechar menu lateral"/><LayoutDashboard size={16} /><span>Workspace</span><ChevronRight size={13} /><strong>{view}</strong></div><div><span className="save-state">{ready ? saveState : 'Carregando…'}</span><span className="topbar-divider" /><button onClick={() => navigate('Perfil')} aria-label="Abrir perfil"><img className="avatar" src={profileAvatar} alt="Seu perfil" /></button></div></header>
+      <header className="topbar"><div><SidebarTrigger className="sidebar-reopen" title="Abrir ou fechar menu lateral"/><LayoutDashboard size={16} /><span>Workspace</span><ChevronRight size={13} /><strong>{selectedProjectId ? data.projects.find(item=>item.id===selectedProjectId)?.name || view : view}</strong></div><div><span className="save-state">{ready ? saveState : 'Carregando…'}</span><span className="topbar-divider" /><button onClick={() => navigate('Perfil')} aria-label="Abrir perfil"><img className="avatar" src={profileAvatar} alt="Seu perfil" /></button></div></header>
       {view === 'Visão geral' && <AgentChatView data={data} selectedId={chatConversationId} resetToken={chatResetToken} onSelect={setChatConversationId} onHistoryChange={setChatConversations} onNavigate={navigate}/>}
       {view === 'CRM' && <CRMView data={data} onCommit={commit} />}
       {view === 'Clientes' && <ClientsView data={data} onCommit={commit} onNewProject={openProject} />}
       {view === 'Tarefas' && <TasksView filtered={filtered} project={project} onNew={() => openTask()} onOpen={openTask} onComplete={completeTask} />}
-      {view === 'Projetos' && <ProjectsView data={data} onNew={() => openProject()} onOpenTask={openTask} />}
+      {view === 'Projetos' && <ProjectsView data={data} selectedProjectId={selectedProjectId} onSelectProject={openProjectWorkspace} onBack={openProjects} onCommit={commit} onNew={() => openProject()} onOpenTask={openTask} onNewTask={projectId=>openTask(undefined,projectId)} />}
       {view === 'Calendário' && <CalendarView tasks={filtered} onOpen={openTask} />}
       {view === 'Arquivos' && <FilesView notes={data.notes} selected={selectedNote} draft={noteDraft} onChoose={chooseNote} onDraft={setNoteDraft} onSave={saveNote} onNew={newNote} />}
       {view === 'Conhecimento' && <KnowledgeView data={data} onCommit={commit} />}
@@ -296,7 +301,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
       {view === 'Configurações' && <SettingsView data={data} onCommit={commit} />}
     </main>
 
-    <TaskDialog open={taskDialog} task={editingTask} projects={data.projects} onClose={() => setTaskDialog(false)} onSave={saveTask} />
+    <TaskDialog open={taskDialog} task={editingTask} projects={data.projects} initialProject={taskProject} onClose={() => { setTaskDialog(false); setTaskProject(''); }} onSave={saveTask} />
     <ProjectDialog open={projectDialog} clients={data.clients} initialClient={projectClient} onClose={() => { setProjectDialog(false); setProjectClient(''); }} onSave={saveProject} />
     <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} data={data} onNavigate={navigate} onQuick={kind => { if (kind === 'task') openTask(); else if (kind === 'project') openProject(); else navigate(kind === 'lead' ? 'CRM' : kind === 'client' ? 'Clientes' : 'Conhecimento'); }} />
   </SidebarProvider>;
@@ -315,8 +320,10 @@ function TasksView({ filtered, project, onNew, onOpen, onComplete }: { filtered:
   return <div className="page-content"><PageHeading eyebrow="TRABALHO EM MOVIMENTO" title="Tarefas" detail={`${visible.length} tarefas nesta visualização`} action={<button className="violet-button" onClick={onNew}><Plus size={17} />Nova tarefa</button>} /><div className="task-filters">{['Todas','Hoje','Próximas','Atrasadas','Concluídas'].map(item=><button className={filter===item?'active':''} onClick={()=>setFilter(item)} key={item}>{item}<span>{item==='Todas'?filtered.length:item==='Hoje'?filtered.filter(t=>t.due===current).length:item==='Próximas'?filtered.filter(t=>t.due>current&&t.due<=nextWeek).length:item==='Atrasadas'?filtered.filter(t=>t.status!=='Success'&&t.due<current).length:filtered.filter(t=>t.status==='Success').length}</span></button>)}</div><div className="kanban">{columns.map(status => <section className="kanban-column" key={status}><div className="kanban-title"><Status value={status} /><span>{visible.filter(t => t.status === status).length}</span></div><div className="kanban-cards">{visible.filter(t => t.status === status).map(t => <article className="task-card" key={t.id} onClick={() => onOpen(t)}><div className="task-card-head"><span className={'priority priority-' + t.priority.toLowerCase()}>{t.priority}</span><button onClick={e => { e.stopPropagation(); onComplete(t); }} aria-label="Concluir tarefa"><CircleCheck size={17} /></button></div><h3>{t.title}</h3><p>{t.description}</p><div className="task-card-foot"><span><Folder size={13} color={project(t.project).color} />{project(t.project).name}</span><span><CalendarDays size={13} />{new Date(t.due + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span></div></article>)}</div></section>)}</div></div>;
 }
 
-function ProjectsView({ data, onNew, onOpenTask }: { data: Data; onNew: () => void; onOpenTask: (t: Task) => void }) {
-  return <div className="page-content"><PageHeading eyebrow="TODAS AS FRENTES" title="Projetos" detail={`${data.projects.length} espaços ativos`} action={<button className="violet-button" onClick={onNew}><Plus size={17} />Novo projeto</button>} /><div className="project-grid">{data.projects.length === 0 ? <section className="empty-collection"><Folder size={28} /><h2>Crie seu primeiro projeto</h2><p>Projetos reúnem suas tarefas e ajudam você a acompanhar cada objetivo.</p><button className="violet-button" onClick={onNew}><Plus size={16} />Novo projeto</button></section> : data.projects.map(p => { const tasks = data.tasks.filter(t => t.project === p.id); const done = tasks.filter(t => t.status === 'Success').length; const pct = Math.round(done / Math.max(tasks.length, 1) * 100); return <section className="project-card" key={p.id}><div className="project-card-icon" style={{ background: p.color + '22', color: p.color }}><Folder /></div><span className="project-percent">{pct}%</span><h2>{p.name}</h2><p>{p.description}</p><div className="project-progress"><i style={{ width: pct + '%', background: p.color }} /></div><div className="project-summary"><span>{done} concluídas</span><span>{tasks.length} tarefas</span></div><div className="project-recent">{tasks.slice(0, 3).map(t => <button key={t.id} onClick={() => onOpenTask(t)}><span className={t.status === 'Success' ? 'mini-check done' : 'mini-check'} />{t.title}</button>)}</div></section>; })}</div></div>;
+function ProjectsView({ data, selectedProjectId, onSelectProject, onBack, onCommit, onNew, onOpenTask, onNewTask }: { data: Data; selectedProjectId: string | null; onSelectProject: (id: string) => void; onBack: () => void; onCommit: (next: Data) => void; onNew: () => void; onOpenTask: (t: Task) => void; onNewTask: (projectId: string) => void }) {
+  const selected = data.projects.find(project => project.id === selectedProjectId);
+  if (selected) return <ProjectDetailView data={data} project={selected} onBack={onBack} onCommit={onCommit} onOpenTask={onOpenTask} onNewTask={()=>onNewTask(selected.id)} />;
+  return <div className="page-content"><PageHeading eyebrow="TODAS AS FRENTES" title="Projetos" detail={`${data.projects.length} espaços ativos`} action={<button className="violet-button" onClick={onNew}><Plus size={17} />Novo projeto</button>} /><div className="project-grid">{data.projects.length === 0 ? <section className="empty-collection"><Folder size={28} /><h2>Crie seu primeiro projeto</h2><p>Projetos reúnem suas tarefas e ajudam você a acompanhar cada objetivo.</p><button className="violet-button" onClick={onNew}><Plus size={16} />Novo projeto</button></section> : data.projects.map(p => { const tasks = data.tasks.filter(t => t.project === p.id); const done = tasks.filter(t => t.status === 'Success').length; const pct = Math.round(done / Math.max(tasks.length, 1) * 100); return <section className="project-card interactive" key={p.id} onClick={()=>onSelectProject(p.id)}><div className="project-card-icon" style={{ background: p.color + '22', color: p.color }}><Folder /></div><span className="project-percent">{pct}%</span><h2>{p.name}</h2><p>{p.description}</p><div className="project-progress"><i style={{ width: pct + '%', background: p.color }} /></div><div className="project-summary"><span>{done} concluídas</span><span>{tasks.length} tarefas</span></div><div className="project-recent">{tasks.slice(0, 3).map(t => <button key={t.id} onClick={event => { event.stopPropagation(); onOpenTask(t); }}><span className={t.status === 'Success' ? 'mini-check done' : 'mini-check'} />{t.title}</button>)}</div><button className="project-open-button">Abrir projeto<ArrowUpRight /></button></section>; })}</div></div>;
 }
 
 function CalendarView({ tasks, onOpen }: { tasks: Task[]; onOpen: (t: Task) => void }) {
@@ -332,8 +339,8 @@ function SimpleView({ title, text, icon: Icon }: { title: string; text: string; 
   return <div className="page-content simple-wrap"><section className="panel simple-view"><Icon size={30} /><h1>{title}</h1><p>{text}</p></section></div>;
 }
 
-function TaskDialog({ open, task, projects, onClose, onSave }: { open: boolean; task: Task | null; projects: Project[]; onClose: () => void; onSave: (f: FormData) => void }) {
-  return <Dialog open={open} onOpenChange={v => !v && onClose()}><DialogContent className="app-dialog"><DialogHeader><DialogTitle>{task ? 'Editar tarefa' : 'Nova tarefa'}</DialogTitle><DialogDescription>Organize o próximo passo e mantenha o trabalho em movimento.</DialogDescription></DialogHeader><form action={onSave} className="form-grid"><label>Título<input name="title" defaultValue={task?.title} required autoFocus /></label><label>Descrição<textarea name="description" defaultValue={task?.description} rows={3} /></label><div className="form-row"><label>Projeto<select name="project" defaultValue={task?.project}>{projects.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label><label>Status<select name="status" defaultValue={task?.status || 'Pending'}>{statuses.map(s => <option value={s} key={s}>{statusLabels[s]}</option>)}</select></label></div><div className="form-row"><label>Prioridade<select name="priority" defaultValue={task?.priority || 'Média'}><option>Baixa</option><option>Média</option><option>Alta</option></select></label><label>Prazo<input name="due" type="date" defaultValue={task?.due || '2026-09-10'} /></label></div><DialogFooter><button type="button" className="subtle-button dialog-button" onClick={onClose}>Cancelar</button><button className="violet-button" type="submit">{task ? 'Salvar alterações' : 'Criar tarefa'}</button></DialogFooter></form></DialogContent></Dialog>;
+function TaskDialog({ open, task, projects, initialProject, onClose, onSave }: { open: boolean; task: Task | null; projects: Project[]; initialProject: string; onClose: () => void; onSave: (f: FormData) => void }) {
+  return <Dialog open={open} onOpenChange={v => !v && onClose()}><DialogContent className="app-dialog"><DialogHeader><DialogTitle>{task ? 'Editar tarefa' : 'Nova tarefa'}</DialogTitle><DialogDescription>Organize o próximo passo e mantenha o trabalho em movimento.</DialogDescription></DialogHeader><form action={onSave} className="form-grid"><label>Título<input name="title" defaultValue={task?.title} required autoFocus /></label><label>Descrição<textarea name="description" defaultValue={task?.description} rows={3} /></label><div className="form-row"><label>Projeto<select name="project" defaultValue={task?.project || initialProject || projects[0]?.id}>{projects.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select></label><label>Status<select name="status" defaultValue={task?.status || 'Pending'}>{statuses.map(s => <option value={s} key={s}>{statusLabels[s]}</option>)}</select></label></div><div className="form-row"><label>Prioridade<select name="priority" defaultValue={task?.priority || 'Média'}><option>Baixa</option><option>Média</option><option>Alta</option></select></label><label>Prazo<input name="due" type="date" defaultValue={task?.due || '2026-09-10'} /></label></div><DialogFooter><button type="button" className="subtle-button dialog-button" onClick={onClose}>Cancelar</button><button className="violet-button" type="submit">{task ? 'Salvar alterações' : 'Criar tarefa'}</button></DialogFooter></form></DialogContent></Dialog>;
 }
 
 function ProjectDialog({ open, clients, initialClient, onClose, onSave }: { open: boolean; clients: Client[]; initialClient: string; onClose: () => void; onSave: (f: FormData) => void }) {

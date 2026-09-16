@@ -1,5 +1,6 @@
 export type Task={id:string;title:string;description:string;project:string;clientId?:string;status:string;priority:string;due:string;created:string;assignee?:string};
-export type Project={id:string;name:string;color:string;description:string;clientId?:string;status?:string;priority?:string;due?:string;technologies?:string[];tags?:string[]};
+export type ProjectCanvasNode={id:string;kind:'overview'|'task'|'idea'|'note'|'milestone';title:string;content:string;x:number;y:number;taskId?:string};
+export type Project={id:string;name:string;color:string;description:string;clientId?:string;status?:string;priority?:string;due?:string;technologies?:string[];tags?:string[];canvas?:ProjectCanvasNode[]};
 export type Note={id:string;name:string;content:string;updated:string;kind?:'user'|'ai';importance?:Importance;category?:string;projectId?:string;clientId?:string;daily?:boolean};
 export type Importance='Baixa'|'Média'|'Alta'|'Crítica';
 export type LeadStatus='Encontrado'|'Analisado'|'Contatado'|'Respondeu'|'Reunião'|'Proposta'|'Negociação'|'Cliente';
