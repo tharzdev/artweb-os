@@ -73,7 +73,7 @@
 /* Master ArtWeb logo supplied by the product owner. */
 .brand-logo{position:relative;display:inline-block;overflow:hidden;flex:0 0 auto;background:transparent}
 .brand-logo img{position:absolute;left:50%;top:50%;width:125%;height:auto;max-width:none;transform:translate(-50%,-50%);object-fit:contain;mix-blend-mode:normal}
-.brand-logo-sidebar{width:94px;height:38px;margin-left:-2px}
+.brand-logo-sidebar{width:47px;height:19px;margin-left:-1px}
 .auth-brand-logo{position:absolute;z-index:2;top:15.8%;left:50%;width:124px;height:68px;transform:translateX(-50%)}
 .brand-logo-loading{width:130px;height:66px}
 .brand-logo-system{width:39px;height:21px}
