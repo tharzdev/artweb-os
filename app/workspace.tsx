@@ -45,6 +45,9 @@ export function Status({ value }: { value: string }) {
 export default function Workspace({ user }: { user: AuthUser }) {
   const [view, setView] = useState('Visão geral');
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(true);
+  const [projectsOpen, setProjectsOpen] = useState(true);
   const [data, setData] = useState<Data>(() => ({ ...emptyData, tasks: [], projects: [], notes: [] }));
   const [ready, setReady] = useState(false);
   const [saveState, setSaveState] = useState('Carregando…');
@@ -59,6 +62,15 @@ export default function Workspace({ user }: { user: AuthUser }) {
   const [chatConversationId, setChatConversationId] = useState<string | null>(null);
   const [chatResetToken, setChatResetToken] = useState(0);
   const dataRef = useRef(data);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  function toggleSearch() {
+    setSearchOpen(current => {
+      const next = !current;
+      if (next) window.setTimeout(() => searchInputRef.current?.focus(), 220);
+      return next;
+    });
+  }
 
   useEffect(() => { dataRef.current = data; }, [data]);
 
@@ -205,25 +217,25 @@ export default function Workspace({ user }: { user: AuthUser }) {
       <SidebarHeader>
         <div className="brand"><span className="brand-logo brand-logo-sidebar"><img src="/assets/artweb-logo.png" alt="ArtWeb OS" /></span><SidebarTrigger className="collapse-button" /></div>
         <div className="workspace-switch"><span className="workspace-icon">A</span><span>Meu workspace<small>Workspace pessoal</small></span><ChevronDown size={15} /></div>
-        <label className="side-search"><Search size={17} /><input aria-label="Buscar no workspace" placeholder="Buscar..." value={query} onFocus={()=>setView('Busca')} onChange={e => { setQuery(e.target.value); setView('Busca'); }} /><kbd>⌘ K</kbd></label>
+        <div className={`side-search-shell ${searchOpen?'is-open':''}`}><button type="button" className="side-search-toggle" aria-label={searchOpen?'Fechar busca':'Abrir busca'} aria-expanded={searchOpen} onClick={toggleSearch}><Search size={17}/></button><div className="side-search-reveal"><input ref={searchInputRef} aria-label="Buscar no workspace" placeholder="Buscar no workspace..." value={query} onFocus={()=>setView('Busca')} onChange={e=>{setQuery(e.target.value);setView('Busca')}}/></div></div>
       </SidebarHeader>
       <SidebarContent>
-        <div className="nav-label">WORKSPACE</div>
-        <SidebarMenu>{nav.map(n => <SidebarMenuItem key={n.label}><SidebarMenuButton className="nav-item" isActive={view === n.label} onClick={() => navigate(n.label)}><n.icon /><span>{n.label}</span>{n.label === 'Tarefas' && <small className="nav-count">{openCount}</small>}</SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu>
+        <div className="side-section-heading"><button type="button" className="side-section-toggle" aria-expanded={workspaceOpen} onClick={()=>setWorkspaceOpen(value=>!value)}><span>WORKSPACE</span><ChevronDown className={workspaceOpen?'is-open':''}/></button></div>
+        <div className={`side-section-collapse ${workspaceOpen?'is-open':''}`}><div><SidebarMenu>{nav.map(n => <SidebarMenuItem key={n.label}><SidebarMenuButton className="nav-item" isActive={view === n.label} onClick={() => navigate(n.label)}><n.icon /><span>{n.label}</span>{n.label === 'Tarefas' && <small className="nav-count">{openCount}</small>}</SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu></div></div>
         <div className="sidebar-divider" />
-        <div className="nav-label">SEUS PROJETOS <button aria-label="Novo projeto" onClick={() => openProject()}><Plus size={13} /></button></div>
-        <div className="project-nav">{data.projects.map(p => <button key={p.id} onClick={() => navigate('Projetos')}><span className="project-dot" style={{ background: p.color }} />{p.name}<ChevronRight size={13} /></button>)}</div>
+        <div className="side-section-heading"><button type="button" className="side-section-toggle" aria-expanded={projectsOpen} onClick={()=>setProjectsOpen(value=>!value)}><span>PROJETOS</span><ChevronDown className={projectsOpen?'is-open':''}/></button><button type="button" className="side-section-add" aria-label="Novo projeto" onClick={()=>openProject()}><Plus size={14}/></button></div>
+        <div className={`side-section-collapse ${projectsOpen?'is-open':''}`}><div><div className="project-nav">{data.projects.length?data.projects.map(p => <button key={p.id} onClick={() => navigate('Projetos')}><span className="project-dot" />{p.name}<ChevronRight size={13} /></button>):<button className="empty-project-link" onClick={()=>openProject()}><Plus/>Criar primeiro projeto</button>}</div></div></div>
         {view === 'Visão geral' && <><div className="sidebar-divider"/><div className="nav-label">CONVERSAS <button aria-label="Nova conversa" onClick={()=>{setChatConversationId(null);setChatResetToken(value=>value+1)}}><Plus size={13}/></button></div><div className="chat-side-history">{chatConversations.length?chatConversations.slice(0,8).map(item=><button className={chatConversationId===item.id?'active':''} onClick={()=>setChatConversationId(item.id)} title={item.title} key={item.id}><MessageCircle/>{item.title}</button>):<span>Suas conversas aparecerão aqui.</span>}</div></>}
       </SidebarContent>
       <SidebarFooter>
-        <div className="focus-card"><img src={asset + 'A2-cubo.png'} alt="" /><h3>Espaço para grandes ideias.</h3><p>Um passo de cada vez.<br />Seu próximo projeto começa aqui.</p><button className="violet-button" onClick={() => navigate('Projetos')}>Explorar projetos<ArrowUpRight size={15} /></button></div>
+        <button className="explore-projects-button" onClick={() => navigate('Projetos')}>Explorar projetos<ArrowUpRight size={15}/></button>
         <button className="bottom-nav" onClick={() => navigate('Ajuda')}><CircleHelp size={17} />Ajuda e atalhos</button>
         <DropdownMenu><DropdownMenuTrigger className="account"><img src={profileAvatar} alt="" /><span>{profileName}<small>{data.profile.title || user.email}</small></span><ChevronDown size={16} /></DropdownMenuTrigger><DropdownMenuContent side="top" align="start" className="account-menu"><DropdownMenuItem onClick={() => navigate('Perfil')}><User />Perfil</DropdownMenuItem><DropdownMenuItem onClick={() => navigate('Configurações')}><Settings />Configurações</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate('Ajuda')}><Command />Atalhos de teclado</DropdownMenuItem><DropdownMenuItem onClick={logout}><LogOut />Sair da conta</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
       </SidebarFooter>
     </Sidebar>
 
     <main className="main-surface">
-      <header className="topbar"><div><SidebarTrigger className="mobile-trigger" /><LayoutDashboard size={16} /><span>Workspace</span><ChevronRight size={13} /><strong>{view}</strong></div><div><span className="save-state">{ready ? saveState : 'Carregando…'}</span><span className="topbar-divider" /><button onClick={() => navigate('Perfil')} aria-label="Abrir perfil"><img className="avatar" src={profileAvatar} alt="Seu perfil" /></button></div></header>
+      <header className="topbar"><div><SidebarTrigger className="sidebar-reopen" title="Abrir ou fechar menu lateral"/><LayoutDashboard size={16} /><span>Workspace</span><ChevronRight size={13} /><strong>{view}</strong></div><div><span className="save-state">{ready ? saveState : 'Carregando…'}</span><span className="topbar-divider" /><button onClick={() => navigate('Perfil')} aria-label="Abrir perfil"><img className="avatar" src={profileAvatar} alt="Seu perfil" /></button></div></header>
       {view === 'Visão geral' && <AgentChatView data={data} selectedId={chatConversationId} resetToken={chatResetToken} onSelect={setChatConversationId} onHistoryChange={setChatConversations} onNavigate={navigate}/>}
       {view === 'CRM' && <CRMView data={data} onCommit={commit} />}
       {view === 'Clientes' && <ClientsView data={data} onCommit={commit} onNewProject={openProject} />}
