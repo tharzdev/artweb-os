@@ -238,3 +238,7 @@
 /* Superfícies contínuas, sem linhas divisoras estruturais */
 .app-sidebar{border-right:0}.topbar{border-bottom:0}.topbar-divider,.sidebar-divider{display:none}.agent-canvas{border:0;border-radius:0;background:#161616}.crm-section-tabs,.knowledge-tabs{border-bottom:0}.crm-section-tabs button{padding:0 11px;border-bottom:0;border-radius:8px}.crm-section-tabs button.active{border-color:transparent;background:#242426}.file-tree,.editor{border-right:0}.editor-top,.file-tree{border-bottom:0}.file-tree,.editor-preview{background:#161616}.settings-section>header,.setting-row,.profile-photo-block,.settings-analysis,.client-detail>header,.entity-history,.activity-list>div,.lead-card-foot,.project-recent,.agent-sources,.agent-composer-foot,.prospecting-results>header,.prospecting-row{border-color:transparent}.prospecting-row{border-bottom:0}.prospecting-results>header{border-bottom:0}.setting-row{border-bottom:0}.settings-section>header{border-bottom:0}.profile-photo-block{border-bottom:0}.settings-analysis,.entity-history,.project-recent,.agent-sources{border-top:0}.agent-composer-foot,.lead-card-foot,.activity-list>div{border-top:0}
 [data-theme=light] .crm-section-tabs button.active{background:#deddda}[data-theme=light] .file-tree,[data-theme=light] .editor-preview{background:#f4f3f1}
+
+/* Contraste sutil entre a navegação e as páginas */
+.app-sidebar [data-sidebar=sidebar]{background:#1a1a1a}
+[data-theme=light] .app-sidebar [data-sidebar=sidebar]{background:#ebeae7}
