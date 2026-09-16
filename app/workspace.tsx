@@ -25,6 +25,7 @@ import { ClientsView, CommandPalette, CRMView, KnowledgeView, SearchView } from 
 import { ProfileView, SettingsView } from '@/components/os/settings-modules';
 import { AgentChatView, type ConversationSummary } from '@/components/os/agent-chat';
 import { ProjectDetailView } from '@/components/os/project-workspace';
+import { FilesWorkspace } from '@/components/os/files-workspace';
 
 const asset = '/assets/';
 const nav = [
@@ -153,8 +154,9 @@ export default function Workspace({ user }: { user: AuthUser }) {
     }).then(result => {
       const initial = normalizeData(result.data);
       setData(initial);
-      setSelectedNote(initial.notes[0]?.id || '');
-      setNoteDraft(initial.notes[0]?.content || '');
+      const firstFile = initial.notes.find(note => note.entryType !== 'folder');
+      setSelectedNote(firstFile?.id || '');
+      setNoteDraft(firstFile?.content || '');
       setView(initial.preferences.startView || 'Visão geral');
       setReady(true);
       setSaveState('Tudo salvo');
@@ -253,12 +255,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
     const notes = data.notes.map(n => n.id === selectedNote ? { ...n, content: noteDraft, updated: new Date().toISOString().slice(0, 10) } : n);
     void commit({ ...data, notes });
   }
-  function chooseNote(note: Note) { setSelectedNote(note.id); setNoteDraft(note.content); }
-  function newNote() {
-    const note: Note = { id: crypto.randomUUID(), name: `arquivo-${data.notes.length + 1}.md`, content: '', updated: new Date().toISOString().slice(0, 10) };
-    const log:Activity={id:crypto.randomUUID(),type:'note.created',entityType:'note',entityId:note.id,description:`Arquivo “${note.name}” criado.`,created:new Date().toISOString()};
-    setSelectedNote(note.id); setNoteDraft(''); void commit({ ...data, notes: [...data.notes, note], activities:[log,...data.activities] });
-  }
+  function chooseNote(note: Note | null) { setSelectedNote(note?.id || ''); setNoteDraft(note?.content || ''); }
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     window.location.reload();
@@ -293,7 +290,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
       {view === 'Tarefas' && <TasksView filtered={filtered} project={project} onNew={() => openTask()} onOpen={openTask} onComplete={completeTask} />}
       {view === 'Projetos' && <ProjectsView data={data} selectedProjectId={selectedProjectId} onSelectProject={openProjectWorkspace} onBack={openProjects} onCommit={commit} onNew={() => openProject()} onOpenTask={openTask} onNewTask={projectId=>openTask(undefined,projectId)} />}
       {view === 'Calendário' && <CalendarView tasks={filtered} onOpen={openTask} />}
-      {view === 'Arquivos' && <FilesView notes={data.notes} selected={selectedNote} draft={noteDraft} onChoose={chooseNote} onDraft={setNoteDraft} onSave={saveNote} onNew={newNote} />}
+      {view === 'Arquivos' && <FilesWorkspace data={data} selected={selectedNote} draft={noteDraft} onChoose={chooseNote} onDraft={setNoteDraft} onSave={saveNote} onCommit={commit} />}
       {view === 'Conhecimento' && <KnowledgeView data={data} onCommit={commit} />}
       {view === 'Busca' && <SearchView data={data} query={query} setQuery={setQuery} onNavigate={navigate} />}
       {view === 'Ajuda' && <SimpleView title="Ajuda e atalhos" text="Use a navegação lateral para alternar entre tarefas, projetos, calendário e arquivos. Pressione ⌘ K para começar uma busca." icon={CircleHelp} />}
@@ -329,10 +326,6 @@ function ProjectsView({ data, selectedProjectId, onSelectProject, onBack, onComm
 function CalendarView({ tasks, onOpen }: { tasks: Task[]; onOpen: (t: Task) => void }) {
   const days = Array.from({ length: 35 }, (_, i) => i - 1);
   return <div className="page-content"><PageHeading eyebrow="SETEMBRO DE 2026" title="Calendário" detail="Prazos e entregas do seu workspace" /><section className="calendar panel"><div className="weekdays">{['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => <span key={d}>{d}</span>)}</div><div className="calendar-grid">{days.map((day, i) => <div className={'calendar-day ' + (day < 1 || day > 30 ? 'outside' : '')} key={i}><strong>{day > 0 && day <= 30 ? day : day < 1 ? 31 : day - 30}</strong>{tasks.filter(t => Number(t.due.slice(8)) === day).map(t => <button key={t.id} onClick={() => onOpen(t)}><span className={'calendar-dot status-dot-' + t.status.replace(' ', '-').toLowerCase()} />{t.title}</button>)}</div>)}</div></section></div>;
-}
-
-function FilesView({ notes, selected, draft, onChoose, onDraft, onSave, onNew }: { notes: Note[]; selected: string; draft: string; onChoose: (n: Note) => void; onDraft: (v: string) => void; onSave: () => void; onNew: () => void }) {
-  return <div className="files-layout"><aside className="file-tree"><div className="file-tree-head"><strong>Arquivos</strong><button aria-label="Novo arquivo" onClick={onNew}><Plus size={16} /></button></div>{notes.map(n => <button className={selected === n.id ? 'active' : ''} key={n.id} onClick={() => onChoose(n)}><FileText size={15} />{n.name}</button>)}</aside><section className="editor"><div className="editor-top"><div><strong>{notes.find(n => n.id === selected)?.name || 'Nenhum arquivo'}</strong><span>Markdown</span></div><button className="violet-button" onClick={notes.length ? onSave : onNew}>{notes.length ? 'Salvar arquivo' : 'Criar arquivo'}</button></div><textarea aria-label="Conteúdo do arquivo" value={draft} onChange={e => onDraft(e.target.value)} spellCheck={false} disabled={!notes.length} placeholder={notes.length ? 'Comece a escrever…' : 'Crie seu primeiro arquivo para começar.'} /></section><aside className="editor-preview"><div className="preview-label">PRÉVIA</div>{draft.split('\n').map((line, i) => line.startsWith('# ') ? <h1 key={i}>{line.slice(2)}</h1> : line.startsWith('## ') ? <h2 key={i}>{line.slice(3)}</h2> : line ? <p key={i}>{line}</p> : <br key={i} />)}</aside></div>;
 }
 
 function SimpleView({ title, text, icon: Icon }: { title: string; text: string; icon: typeof Settings }) {

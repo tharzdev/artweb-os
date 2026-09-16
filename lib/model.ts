@@ -1,7 +1,7 @@
 export type Task={id:string;title:string;description:string;project:string;clientId?:string;status:string;priority:string;due:string;created:string;assignee?:string};
 export type ProjectCanvasNode={id:string;kind:'overview'|'task'|'idea'|'note'|'milestone';title:string;content:string;x:number;y:number;taskId?:string};
 export type Project={id:string;name:string;color:string;description:string;clientId?:string;status?:string;priority?:string;due?:string;technologies?:string[];tags?:string[];canvas?:ProjectCanvasNode[]};
-export type Note={id:string;name:string;content:string;updated:string;kind?:'user'|'ai';importance?:Importance;category?:string;projectId?:string;clientId?:string;daily?:boolean};
+export type Note={id:string;name:string;content:string;updated:string;kind?:'user'|'ai';importance?:Importance;category?:string;projectId?:string;clientId?:string;daily?:boolean;entryType?:'note'|'folder'|'canvas'|'base'|'drawing';parentId?:string;icon?:string;iconColor?:string;bookmarked?:boolean};
 export type Importance='Baixa'|'Média'|'Alta'|'Crítica';
 export type LeadStatus='Encontrado'|'Analisado'|'Contatado'|'Respondeu'|'Reunião'|'Proposta'|'Negociação'|'Cliente';
 export type Lead={id:string;company:string;contact:string;email:string;phone:string;whatsapp:string;instagram:string;site:string;segment:string;city:string;source:string;notes:string;potential:Importance;status:LeadStatus;nextAction:string;created:string;updated:string;externalId?:string;rating?:number;reviewCount?:number;mapsUrl?:string};
