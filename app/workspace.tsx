@@ -48,6 +48,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
   const [projectsOpen, setProjectsOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(286);
   const [data, setData] = useState<Data>(() => ({ ...emptyData, tasks: [], projects: [], notes: [] }));
   const [ready, setReady] = useState(false);
   const [saveState, setSaveState] = useState('Carregando…');
@@ -63,6 +64,52 @@ export default function Workspace({ user }: { user: AuthUser }) {
   const [chatResetToken, setChatResetToken] = useState(0);
   const dataRef = useRef(data);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    const stored = Number(window.localStorage.getItem('artweb-sidebar-width'));
+    const frame = Number.isFinite(stored) && stored >= 240 && stored <= 420
+      ? window.requestAnimationFrame(() => setSidebarWidth(stored))
+      : 0;
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      document.body.classList.remove('sidebar-is-resizing');
+    };
+  }, []);
+
+  function storeSidebarWidth(width: number) {
+    const next = Math.min(420, Math.max(240, Math.round(width)));
+    setSidebarWidth(next);
+    window.localStorage.setItem('artweb-sidebar-width', String(next));
+  }
+
+  function startSidebarResize(event: React.PointerEvent<HTMLDivElement>) {
+    sidebarResizeRef.current = { startX: event.clientX, startWidth: sidebarWidth };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.classList.add('sidebar-is-resizing');
+  }
+
+  function resizeSidebar(event: React.PointerEvent<HTMLDivElement>) {
+    const resize = sidebarResizeRef.current;
+    if (!resize) return;
+    setSidebarWidth(Math.min(420, Math.max(240, resize.startWidth + event.clientX - resize.startX)));
+  }
+
+  function stopSidebarResize(event: React.PointerEvent<HTMLDivElement>) {
+    const resize = sidebarResizeRef.current;
+    if (!resize) return;
+    const next = resize.startWidth + event.clientX - resize.startX;
+    sidebarResizeRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    document.body.classList.remove('sidebar-is-resizing');
+    storeSidebarWidth(next);
+  }
+
+  function resizeSidebarWithKeyboard(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home') return;
+    event.preventDefault();
+    storeSidebarWidth(event.key === 'Home' ? 286 : sidebarWidth + (event.key === 'ArrowRight' ? 12 : -12));
+  }
 
   function toggleSearch() {
     setSearchOpen(current => {
@@ -212,7 +259,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
     window.location.reload();
   }
 
-  return <SidebarProvider style={{ '--sidebar-width': '286px' } as React.CSSProperties}>
+  return <SidebarProvider style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}>
     <Sidebar className="app-sidebar">
       <SidebarHeader>
         <div className="brand"><span className="brand-logo brand-logo-sidebar"><img src="/assets/artweb-logo.png" alt="ArtWeb OS" /></span><div className="sidebar-header-actions"><div className={`side-search-shell ${searchOpen?'is-open':''}`}><button type="button" className="side-search-toggle" aria-label={searchOpen?'Fechar busca':'Abrir busca'} aria-expanded={searchOpen} onClick={toggleSearch}><Search size={15}/></button><div className="side-search-reveal"><input ref={searchInputRef} aria-label="Buscar no workspace" placeholder="Buscar no workspace..." value={query} onFocus={()=>setView('Busca')} onChange={e=>{setQuery(e.target.value);setView('Busca')}}/></div></div><SidebarTrigger className="collapse-button" /></div></div>
@@ -230,6 +277,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
         <button className="bottom-nav" onClick={() => navigate('Ajuda')}><CircleHelp size={17} />Ajuda e atalhos</button>
         <DropdownMenu><DropdownMenuTrigger className="account"><img src={profileAvatar} alt="" /><span>{profileName}<small>{data.profile.title || user.email}</small></span><ChevronDown size={16} /></DropdownMenuTrigger><DropdownMenuContent side="top" align="start" className="account-menu"><DropdownMenuItem onClick={() => navigate('Perfil')}><User />Perfil</DropdownMenuItem><DropdownMenuItem onClick={() => navigate('Configurações')}><Settings />Configurações</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem onClick={() => navigate('Ajuda')}><Command />Atalhos de teclado</DropdownMenuItem><DropdownMenuItem onClick={logout}><LogOut />Sair da conta</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
       </SidebarFooter>
+      <div className="sidebar-resize-handle" role="separator" aria-label="Ajustar largura da barra lateral" aria-orientation="vertical" aria-valuemin={240} aria-valuemax={420} aria-valuenow={Math.round(sidebarWidth)} aria-valuetext={`${Math.round(sidebarWidth)} pixels`} title="Arraste para ajustar. Clique duas vezes para restaurar." tabIndex={0} onPointerDown={startSidebarResize} onPointerMove={resizeSidebar} onPointerUp={stopSidebarResize} onPointerCancel={stopSidebarResize} onKeyDown={resizeSidebarWithKeyboard} onDoubleClick={()=>storeSidebarWidth(286)} />
     </Sidebar>
 
     <main className="main-surface">

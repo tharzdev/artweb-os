@@ -242,3 +242,8 @@
 /* Contraste sutil entre a navegação e as páginas */
 .app-sidebar [data-sidebar=sidebar]{background:#1a1a1a}
 [data-theme=light] .app-sidebar [data-sidebar=sidebar]{background:#ebeae7}
+
+/* Largura ajustável da barra lateral */
+.app-sidebar [data-slot=sidebar-inner]{position:relative}.sidebar-resize-handle{position:absolute;z-index:30;top:0;right:-5px;width:10px;height:100%;cursor:col-resize;touch-action:none;outline:0}.sidebar-resize-handle:after{content:"";position:absolute;top:12px;right:4px;width:2px;height:calc(100% - 24px);border-radius:2px;background:#ffffff00;transition:background .18s ease}.sidebar-resize-handle:hover:after,.sidebar-resize-handle:focus-visible:after,body.sidebar-is-resizing .sidebar-resize-handle:after{background:#ffffff24}body.sidebar-is-resizing{cursor:col-resize!important;user-select:none}body.sidebar-is-resizing [data-slot=sidebar-gap],body.sidebar-is-resizing [data-slot=sidebar-container]{transition:none!important}
+[data-theme=light] .sidebar-resize-handle:hover:after,[data-theme=light] .sidebar-resize-handle:focus-visible:after,[data-theme=light] body.sidebar-is-resizing .sidebar-resize-handle:after{background:#00000024}
+@media(max-width:767px){.sidebar-resize-handle{display:none}}
