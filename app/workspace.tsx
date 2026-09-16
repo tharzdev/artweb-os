@@ -212,12 +212,10 @@ export default function Workspace({ user }: { user: AuthUser }) {
     window.location.reload();
   }
 
-  return <SidebarProvider style={{ '--sidebar-width': '258px' } as React.CSSProperties}>
+  return <SidebarProvider style={{ '--sidebar-width': '286px' } as React.CSSProperties}>
     <Sidebar className="app-sidebar">
       <SidebarHeader>
-        <div className="brand"><span className="brand-logo brand-logo-sidebar"><img src="/assets/artweb-logo.png" alt="ArtWeb OS" /></span><SidebarTrigger className="collapse-button" /></div>
-        <div className="workspace-switch"><span className="workspace-icon">A</span><span>Meu workspace<small>Workspace pessoal</small></span><ChevronDown size={15} /></div>
-        <div className={`side-search-shell ${searchOpen?'is-open':''}`}><button type="button" className="side-search-toggle" aria-label={searchOpen?'Fechar busca':'Abrir busca'} aria-expanded={searchOpen} onClick={toggleSearch}><Search size={17}/></button><div className="side-search-reveal"><input ref={searchInputRef} aria-label="Buscar no workspace" placeholder="Buscar no workspace..." value={query} onFocus={()=>setView('Busca')} onChange={e=>{setQuery(e.target.value);setView('Busca')}}/></div></div>
+        <div className="brand"><span className="brand-logo brand-logo-sidebar"><img src="/assets/artweb-logo.png" alt="ArtWeb OS" /></span><div className="sidebar-header-actions"><div className={`side-search-shell ${searchOpen?'is-open':''}`}><button type="button" className="side-search-toggle" aria-label={searchOpen?'Fechar busca':'Abrir busca'} aria-expanded={searchOpen} onClick={toggleSearch}><Search size={15}/></button><div className="side-search-reveal"><input ref={searchInputRef} aria-label="Buscar no workspace" placeholder="Buscar no workspace..." value={query} onFocus={()=>setView('Busca')} onChange={e=>{setQuery(e.target.value);setView('Busca')}}/></div></div><SidebarTrigger className="collapse-button" /></div></div>
       </SidebarHeader>
       <SidebarContent>
         <div className="side-section-heading"><button type="button" className="side-section-toggle" aria-expanded={workspaceOpen} onClick={()=>setWorkspaceOpen(value=>!value)}><span>WORKSPACE</span><ChevronDown className={workspaceOpen?'is-open':''}/></button></div>
