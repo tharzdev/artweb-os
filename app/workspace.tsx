@@ -287,7 +287,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
 
     <main className="main-surface">
       <header className="topbar"><div><SidebarTrigger className="sidebar-reopen" title="Abrir ou fechar menu lateral"/><LayoutDashboard size={16} /><span>Workspace</span><ChevronRight size={13} /><strong>{selectedProjectId ? data.projects.find(item=>item.id===selectedProjectId)?.name || view : view}</strong></div><div><span className="save-state">{ready ? saveState : 'Carregando…'}</span><span className="topbar-divider" /><button onClick={() => navigate('Perfil')} aria-label="Abrir perfil"><img className="avatar" src={profileAvatar} alt="Seu perfil" /></button></div></header>
-      {view === 'Visão geral' && <AgentChatView data={data} selectedId={chatConversationId} resetToken={chatResetToken} onSelect={setChatConversationId} onHistoryChange={setChatConversations} onNavigate={navigate}/>}
+      {view === 'Visão geral' && <AgentChatView selectedId={chatConversationId} resetToken={chatResetToken} onSelect={setChatConversationId} onHistoryChange={setChatConversations} onNavigate={navigate}/>}
       {view === 'CRM' && <CRMView data={data} onCommit={commit} />}
       {view === 'Clientes' && <ClientsView data={data} onCommit={commit} onNewProject={openProject} />}
       {view === 'Tarefas' && <TasksView filtered={filtered} project={project} onNew={() => openTask()} onOpen={openTask} onComplete={completeTask} />}
