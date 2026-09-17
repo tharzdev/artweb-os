@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowUpRight, CalendarDays, CheckSquare, ChevronDown, ChevronRight,
+  ArrowUpRight, CalendarDays, CalendarPlus, CheckSquare, ChevronDown, ChevronLeft, ChevronRight,
   CircleCheck, CircleDashed, CircleHelp, CircleX, Clock3, Command,
   FileText, Folder, LayoutDashboard, MessageCircle, Plus, Search,
-  Send, Settings, TriangleAlert, User, LogOut, ContactRound, Building2, Brain,
+  Send, Settings, Trash2, TriangleAlert, User, LogOut, ContactRound, Building2, Brain,
 } from 'lucide-react';
 import {
   SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarFooter,
@@ -19,7 +19,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { emptyData, normalizeData, statusLabels, statuses, type Activity, type Client, type Data, type Note, type Project, type Task } from '@/lib/model';
+import { emptyData, normalizeData, statusLabels, statuses, type Activity, type CalendarEvent, type Client, type Data, type Note, type Project, type Task } from '@/lib/model';
 import type { AuthUser } from '@/lib/auth';
 import { ClientsView, CommandPalette, CRMView, KnowledgeView, SearchView } from '@/components/os/business-modules';
 import { ProfileView, SettingsView } from '@/components/os/settings-modules';
@@ -289,7 +289,7 @@ export default function Workspace({ user }: { user: AuthUser }) {
       {view === 'Clientes' && <ClientsView data={data} onCommit={commit} onNewProject={openProject} />}
       {view === 'Tarefas' && <TasksView filtered={filtered} project={project} onNew={() => openTask()} onOpen={openTask} onComplete={completeTask} />}
       {view === 'Projetos' && <ProjectsView data={data} selectedProjectId={selectedProjectId} onSelectProject={openProjectWorkspace} onBack={openProjects} onCommit={commit} onNew={() => openProject()} onOpenTask={openTask} onNewTask={projectId=>openTask(undefined,projectId)} />}
-      {view === 'Calendário' && <CalendarView tasks={filtered} onOpen={openTask} />}
+      {view === 'Calendário' && <CalendarView data={data} tasks={filtered} onOpenTask={openTask} onCommit={commit} />}
       {view === 'Arquivos' && <FilesWorkspace data={data} selected={selectedNote} draft={noteDraft} onChoose={chooseNote} onDraft={setNoteDraft} onSave={saveNote} onCommit={commit} />}
       {view === 'Conhecimento' && <KnowledgeView data={data} onCommit={commit} />}
       {view === 'Busca' && <SearchView data={data} query={query} setQuery={setQuery} onNavigate={navigate} />}
@@ -323,9 +323,73 @@ function ProjectsView({ data, selectedProjectId, onSelectProject, onBack, onComm
   return <div className="page-content"><PageHeading eyebrow="TODAS AS FRENTES" title="Projetos" detail={`${data.projects.length} espaços ativos`} action={<button className="violet-button" onClick={onNew}><Plus size={17} />Novo projeto</button>} /><div className="project-grid">{data.projects.length === 0 ? <section className="empty-collection"><Folder size={28} /><h2>Crie seu primeiro projeto</h2><p>Projetos reúnem suas tarefas e ajudam você a acompanhar cada objetivo.</p><button className="violet-button" onClick={onNew}><Plus size={16} />Novo projeto</button></section> : data.projects.map(p => { const tasks = data.tasks.filter(t => t.project === p.id); const done = tasks.filter(t => t.status === 'Success').length; const pct = Math.round(done / Math.max(tasks.length, 1) * 100); return <section className="project-card interactive" key={p.id} onClick={()=>onSelectProject(p.id)}><div className="project-card-icon" style={{ background: p.color + '22', color: p.color }}><Folder /></div><span className="project-percent">{pct}%</span><h2>{p.name}</h2><p>{p.description}</p><div className="project-progress"><i style={{ width: pct + '%', background: p.color }} /></div><div className="project-summary"><span>{done} concluídas</span><span>{tasks.length} tarefas</span></div><div className="project-recent">{tasks.slice(0, 3).map(t => <button key={t.id} onClick={event => { event.stopPropagation(); onOpenTask(t); }}><span className={t.status === 'Success' ? 'mini-check done' : 'mini-check'} />{t.title}</button>)}</div><button className="project-open-button">Abrir projeto<ArrowUpRight /></button></section>; })}</div></div>;
 }
 
-function CalendarView({ tasks, onOpen }: { tasks: Task[]; onOpen: (t: Task) => void }) {
-  const days = Array.from({ length: 35 }, (_, i) => i - 1);
-  return <div className="page-content"><PageHeading eyebrow="SETEMBRO DE 2026" title="Calendário" detail="Prazos e entregas do seu workspace" /><section className="calendar panel"><div className="weekdays">{['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => <span key={d}>{d}</span>)}</div><div className="calendar-grid">{days.map((day, i) => <div className={'calendar-day ' + (day < 1 || day > 30 ? 'outside' : '')} key={i}><strong>{day > 0 && day <= 30 ? day : day < 1 ? 31 : day - 30}</strong>{tasks.filter(t => Number(t.due.slice(8)) === day).map(t => <button key={t.id} onClick={() => onOpen(t)}><span className={'calendar-dot status-dot-' + t.status.replace(' ', '-').toLowerCase()} />{t.title}</button>)}</div>)}</div></section></div>;
+function CalendarView({ data, tasks, onOpenTask, onCommit }: { data: Data; tasks: Task[]; onOpenTask: (task: Task) => void; onCommit: (next: Data) => void }) {
+  const today = new Date();
+  const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+  const [eventDialog, setEventDialog] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [selectedDate, setSelectedDate] = useState(() => localDate(today));
+  const mondayFirst = data.preferences.weekStartsOn === 'monday';
+  const weekdays = mondayFirst ? ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'] : ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const cells = useMemo(() => calendarCells(month, mondayFirst), [month, mondayFirst]);
+  const monthTitle = month.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+  function openNewEvent(date = localDate(today)) { setEditingEvent(null); setSelectedDate(date); setEventDialog(true); }
+  function openEvent(event: CalendarEvent) { setEditingEvent(event); setSelectedDate(event.date); setEventDialog(true); }
+  function saveEvent(form: FormData) {
+    const title = String(form.get('title') || '').trim(); if (!title) return;
+    const event: CalendarEvent = { id: editingEvent?.id || crypto.randomUUID(), title, description: String(form.get('description') || '').trim(), date: String(form.get('date') || selectedDate), startTime: String(form.get('startTime') || ''), endTime: String(form.get('endTime') || ''), projectId: String(form.get('projectId') || '') || undefined, created: editingEvent?.created || new Date().toISOString() };
+    const events = editingEvent ? data.events.map(item => item.id === event.id ? event : item) : [...data.events, event];
+    const log: Activity = { id: crypto.randomUUID(), type: editingEvent ? 'event.updated' : 'event.created', entityType: 'event', entityId: event.id, description: `Evento “${event.title}” ${editingEvent ? 'atualizado' : 'criado'}.`, created: new Date().toISOString() };
+    void onCommit({ ...data, events, activities: [log, ...data.activities] }); setEventDialog(false); setEditingEvent(null);
+  }
+  function removeEvent() {
+    if (!editingEvent || !window.confirm(`Excluir o evento “${editingEvent.title}”?`)) return;
+    const log: Activity = { id: crypto.randomUUID(), type: 'event.deleted', entityType: 'event', entityId: editingEvent.id, description: `Evento “${editingEvent.title}” excluído.`, created: new Date().toISOString() };
+    void onCommit({ ...data, events: data.events.filter(item => item.id !== editingEvent.id), activities: [log, ...data.activities] }); setEventDialog(false); setEditingEvent(null);
+  }
+  function moveMonth(offset: number) { setMonth(value => new Date(value.getFullYear(), value.getMonth() + offset, 1)); }
+  function goToday() { const value = new Date(); setMonth(new Date(value.getFullYear(), value.getMonth(), 1)); }
+
+  return <div className="page-content calendar-page">
+    <PageHeading eyebrow={monthTitle.toUpperCase()} title="Calendário" detail="Crie eventos e acompanhe os prazos do workspace" action={<button className="violet-button" onClick={() => openNewEvent()}><CalendarPlus size={17} />Novo evento</button>} />
+    <section className="calendar panel">
+      <header className="calendar-toolbar"><div><button aria-label="Mês anterior" onClick={() => moveMonth(-1)}><ChevronLeft /></button><button className="calendar-today" onClick={goToday}>Hoje</button><button aria-label="Próximo mês" onClick={() => moveMonth(1)}><ChevronRight /></button></div><strong>{monthTitle}</strong><span>Clique em um dia para adicionar</span></header>
+      <div className="weekdays">{weekdays.map(day => <span key={day}>{day}</span>)}</div>
+      <div className="calendar-grid">{cells.map(cell => {
+        const dayTasks = tasks.filter(task => task.due === cell.date);
+        const dayEvents = data.events.filter(event => event.date === cell.date).sort((a, b) => a.startTime.localeCompare(b.startTime));
+        return <div role="button" tabIndex={0} aria-label={`Adicionar evento em ${formatCalendarDate(cell.date)}`} className={`calendar-day ${cell.current ? '' : 'outside'} ${cell.date === localDate(today) ? 'today' : ''}`} key={cell.date} onClick={() => openNewEvent(cell.date)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openNewEvent(cell.date); } }}>
+          <div className="calendar-day-head"><strong>{cell.day}</strong>{cell.date === localDate(today) && <small>Hoje</small>}<Plus /></div>
+          <div className="calendar-day-items">
+            {dayEvents.map(event => <button className="calendar-event" key={event.id} onClick={click => { click.stopPropagation(); openEvent(event); }}><span>{event.startTime || 'Evento'}</span><strong>{event.title}</strong></button>)}
+            {dayTasks.map(task => <button className="calendar-task" key={task.id} onClick={click => { click.stopPropagation(); onOpenTask(task); }}><span className={'calendar-dot status-dot-' + task.status.replace(' ', '-').toLowerCase()} /><strong>{task.title}</strong></button>)}
+          </div>
+        </div>;
+      })}</div>
+    </section>
+    <CalendarEventDialog open={eventDialog} event={editingEvent} selectedDate={selectedDate} projects={data.projects} onClose={() => { setEventDialog(false); setEditingEvent(null); }} onSave={saveEvent} onDelete={removeEvent} />
+  </div>;
+}
+
+function CalendarEventDialog({ open, event, selectedDate, projects, onClose, onSave, onDelete }: { open: boolean; event: CalendarEvent | null; selectedDate: string; projects: Project[]; onClose: () => void; onSave: (form: FormData) => void; onDelete: () => void }) {
+  return <Dialog open={open} onOpenChange={value => !value && onClose()}><DialogContent className="app-dialog calendar-event-dialog"><DialogHeader><DialogTitle>{event ? 'Editar evento' : 'Novo evento'}</DialogTitle><DialogDescription>{event ? 'Atualize os detalhes deste compromisso.' : 'Adicione um compromisso diretamente ao calendário.'}</DialogDescription></DialogHeader><form action={onSave} className="form-grid" key={event?.id || selectedDate}><label>Título<input name="title" defaultValue={event?.title} placeholder="Nome do evento" required autoFocus /></label><label>Descrição<textarea name="description" defaultValue={event?.description} placeholder="Contexto, pauta ou observações" rows={3} /></label><div className="form-row"><label>Data<input name="date" type="date" defaultValue={event?.date || selectedDate} required /></label><label>Projeto<select name="projectId" defaultValue={event?.projectId || ''}><option value="">Sem projeto</option>{projects.map(project => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label></div><div className="form-row"><label>Início<input name="startTime" type="time" defaultValue={event?.startTime || '09:00'} /></label><label>Término<input name="endTime" type="time" defaultValue={event?.endTime || '10:00'} /></label></div><DialogFooter className="calendar-dialog-footer">{event && <button type="button" className="calendar-delete-button" onClick={onDelete}><Trash2 />Excluir</button>}<span /><button type="button" className="subtle-button dialog-button" onClick={onClose}>Cancelar</button><button className="violet-button" type="submit">{event ? 'Salvar alterações' : 'Criar evento'}</button></DialogFooter></form></DialogContent></Dialog>;
+}
+
+function calendarCells(month: Date, mondayFirst: boolean) {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const offset = mondayFirst ? (first.getDay() + 6) % 7 : first.getDay();
+  const start = new Date(month.getFullYear(), month.getMonth(), 1 - offset);
+  return Array.from({ length: 42 }, (_, index) => { const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index); return { date: localDate(date), day: date.getDate(), current: date.getMonth() === month.getMonth() }; });
+}
+
+function localDate(date: Date) {
+  const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatCalendarDate(value: string) {
+  return new Date(value + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
 function SimpleView({ title, text, icon: Icon }: { title: string; text: string; icon: typeof Settings }) {

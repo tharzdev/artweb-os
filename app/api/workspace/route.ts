@@ -14,6 +14,7 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   if (!env.DB) return NextResponse.json({ error: 'Armazenamento indisponível.' }, { status: 503 });
   const data = await request.json() as Data;
+  if (!Array.isArray(data.events)) data.events = [];
   if (!Array.isArray(data.tasks) || !Array.isArray(data.projects) || !Array.isArray(data.notes) ||
     !Array.isArray(data.leads) || !Array.isArray(data.clients) || !Array.isArray(data.memories) || !Array.isArray(data.activities) ||
     !data.profile || typeof data.profile !== 'object' || !data.preferences || typeof data.preferences !== 'object') {
