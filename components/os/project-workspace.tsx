@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import {
   ArrowLeft, Brush, CalendarDays, CheckCircle2, Circle, CircleHelp, Clock3,
   Diamond, Download, ExternalLink, FileText, Flag, Folder, GripVertical,
@@ -93,6 +93,9 @@ function initialCanvasNodes(project: Project, tasks: Task[]): ProjectCanvasNode[
 type CanvasTool = 'select' | 'connect' | 'brush';
 type CanvasPanel = 'add' | 'shape' | 'brush' | 'settings' | 'help' | null;
 type CanvasSnapshot = { nodes: ProjectCanvasNode[]; connections: ProjectCanvasConnection[]; strokes: ProjectCanvasStroke[] };
+type CanvasPosition = { x: number; y: number };
+type ResizeDirection = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
+type CanvasContextMenu = CanvasPosition & { left: number; top: number };
 
 function ProjectCanvas({ project, tasks, onSave, onBack, onDashboard }: { project: Project; tasks: Task[]; onSave: (nodes: ProjectCanvasNode[], connections: ProjectCanvasConnection[], strokes: ProjectCanvasStroke[]) => void; onBack: () => void; onDashboard: () => void }) {
   const [nodes, setNodes] = useState<ProjectCanvasNode[]>(() => initialCanvasNodes(project, tasks));
@@ -107,6 +110,7 @@ function ProjectCanvas({ project, tasks, onSave, onBack, onDashboard }: { projec
   const [snapToGrid, setSnapToGrid] = useState(false);
   const [brush, setBrush] = useState({ color: '#F4F4F4', width: 5, opacity: .85, style: 'solid' as ProjectCanvasStroke['style'] });
   const [shapeStyle, setShapeStyle] = useState({ fill: '#29292B', stroke: '#E0E0E0' });
+  const [contextMenu, setContextMenu] = useState<CanvasContextMenu | null>(null);
   const nodesRef = useRef(nodes);
   const connectionsRef = useRef(connections);
   const strokesRef = useRef(strokes);
@@ -114,7 +118,9 @@ function ProjectCanvas({ project, tasks, onSave, onBack, onDashboard }: { projec
   const shellRef = useRef<HTMLElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingInsertRef = useRef<CanvasPosition | null>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; x: number; y: number } | null>(null);
+  const resizeRef = useRef<{ id: string; direction: ResizeDirection; startX: number; startY: number; x: number; y: number; width: number; height: number } | null>(null);
   const panRef = useRef<{ startX: number; startY: number; x: number; y: number } | null>(null);
   const strokeRef = useRef<{ id: string } | null>(null);
   const historyRef = useRef<CanvasSnapshot[]>([]);
@@ -137,30 +143,35 @@ function ProjectCanvas({ project, tasks, onSave, onBack, onDashboard }: { projec
     const viewport = viewportRef.current;
     return { x: ((viewport?.clientWidth || 900) / 2 - pan.x) / zoom - 135 + offset, y: ((viewport?.clientHeight || 600) / 2 - pan.y) / zoom - 80 + offset };
   }
-  function addCard(kind: 'idea' | 'note' | 'milestone') {
+  function insertPosition(position?: CanvasPosition, offset = 0) {
+    return position ? { x: position.x + offset, y: position.y + offset } : centerPosition(offset);
+  }
+  function addCard(kind: 'idea' | 'note' | 'milestone', position?: CanvasPosition) {
     const labels = { idea: ['Nova ideia', 'Descreva uma possibilidade para explorar.'], note: ['Nova nota', 'Registre contexto, decisões ou referências.'], milestone: ['Novo marco', 'Defina uma entrega importante do projeto.'] };
     const [title, content] = labels[kind];
-    remember(); updateNodes([...nodesRef.current, { id: crypto.randomUUID(), kind, title, content, ...centerPosition() }]);
+    remember(); updateNodes([...nodesRef.current, { id: crypto.randomUUID(), kind, title, content, ...insertPosition(position) }]);
     window.setTimeout(persist, 0);
-    setPanel(null); setTool('select');
+    setPanel(null); setContextMenu(null); setTool('select');
   }
-  function addShape(shapeType: NonNullable<ProjectCanvasNode['shapeType']>) {
-    remember(); updateNodes([...nodesRef.current, { id: crypto.randomUUID(), kind: 'shape', title: '', content: '', shapeType, fill: shapeStyle.fill, stroke: shapeStyle.stroke, ...centerPosition() }]);
-    window.setTimeout(persist, 0); setPanel(null); setTool('select');
+  function addShape(shapeType: NonNullable<ProjectCanvasNode['shapeType']>, position?: CanvasPosition) {
+    remember(); updateNodes([...nodesRef.current, { id: crypto.randomUUID(), kind: 'shape', title: '', content: '', shapeType, fill: shapeStyle.fill, stroke: shapeStyle.stroke, ...insertPosition(position) }]);
+    window.setTimeout(persist, 0); setPanel(null); setContextMenu(null); setTool('select');
   }
-  function addLink() {
+  function addLink(position?: CanvasPosition) {
     const value = window.prompt('Cole o endereço do link')?.trim(); if (!value) return;
     const url = normalizeLink(value); if (!url) { window.alert('Use um link http, https ou mailto válido.'); return; }
-    remember(); updateNodes([...nodesRef.current, { id: crypto.randomUUID(), kind: 'link', title: new URL(url).hostname || 'Link', content: value, url, ...centerPosition() }]);
-    window.setTimeout(persist, 0); setPanel(null); setTool('select');
+    remember(); updateNodes([...nodesRef.current, { id: crypto.randomUUID(), kind: 'link', title: new URL(url).hostname || 'Link', content: value, url, ...insertPosition(position) }]);
+    window.setTimeout(persist, 0); setPanel(null); setContextMenu(null); setTool('select');
   }
   async function uploadFiles(event: ChangeEvent<HTMLInputElement>, kind: 'image' | 'file') {
     const selected = Array.from(event.target.files || []); event.target.value = ''; if (!selected.length) return;
     const accepted = selected.filter(file => file.size <= 5 * 1024 * 1024);
     if (accepted.length !== selected.length) window.alert('Arquivos maiores que 5 MB não foram adicionados.');
-    const entries = await Promise.all(accepted.map(async (file, index): Promise<ProjectCanvasNode> => ({ id: crypto.randomUUID(), kind, title: file.name, content: kind === 'image' ? 'Imagem adicionada ao projeto' : `${formatBytes(file.size)} · ${file.type || 'Arquivo'}`, assetDataUrl: await fileToDataUrl(file), fileName: file.name, mimeType: file.type, fileSize: file.size, ...centerPosition(index * 24) })));
+    const requestedPosition = pendingInsertRef.current;
+    pendingInsertRef.current = null;
+    const entries = await Promise.all(accepted.map(async (file, index): Promise<ProjectCanvasNode> => ({ id: crypto.randomUUID(), kind, title: file.name, content: kind === 'image' ? 'Imagem adicionada ao projeto' : `${formatBytes(file.size)} · ${file.type || 'Arquivo'}`, assetDataUrl: await fileToDataUrl(file), fileName: file.name, mimeType: file.type, fileSize: file.size, ...insertPosition(requestedPosition || undefined, index * 24) })));
     if (!entries.length) return;
-    remember(); updateNodes([...nodesRef.current, ...entries]); window.setTimeout(persist, 0); setPanel(null); setTool('select');
+    remember(); updateNodes([...nodesRef.current, ...entries]); window.setTimeout(persist, 0); setPanel(null); setContextMenu(null); setTool('select');
   }
   function removeNode(id: string) {
     remember(); updateNodes(nodesRef.current.filter(node => node.id !== id)); updateConnections(connectionsRef.current.filter(connection => connection.from !== id && connection.to !== id)); window.setTimeout(persist, 0);
@@ -190,8 +201,36 @@ function ProjectCanvas({ project, tasks, onSave, onBack, onDashboard }: { projec
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     persist();
   }
+  function startNodeResize(event: React.PointerEvent<HTMLSpanElement>, node: ProjectCanvasNode, direction: ResizeDirection) {
+    if (tool !== 'select') return;
+    event.preventDefault(); event.stopPropagation(); remember();
+    const size = nodeSize(node);
+    resizeRef.current = { id: node.id, direction, startX: event.clientX, startY: event.clientY, x: node.x, y: node.y, width: size.width, height: size.height };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function moveNodeResize(event: React.PointerEvent<HTMLSpanElement>) {
+    const value = resizeRef.current; if (!value) return;
+    event.preventDefault(); event.stopPropagation();
+    const dx = (event.clientX - value.startX) / zoom;
+    const dy = (event.clientY - value.startY) / zoom;
+    const node = nodesRef.current.find(item => item.id === value.id); if (!node) return;
+    const minimum = minimumNodeSize(node);
+    let width = value.width; let height = value.height; let x = value.x; let y = value.y;
+    if (value.direction.includes('e')) width = Math.max(minimum.width, value.width + dx);
+    if (value.direction.includes('s')) height = Math.max(minimum.height, value.height + dy);
+    if (value.direction.includes('w')) { width = Math.max(minimum.width, value.width - dx); x = value.x + value.width - width; }
+    if (value.direction.includes('n')) { height = Math.max(minimum.height, value.height - dy); y = value.y + value.height - height; }
+    editNode(value.id, { x: snapToGrid ? Math.round(x / 24) * 24 : x, y: snapToGrid ? Math.round(y / 24) * 24 : y, width: snapToGrid ? Math.round(width / 24) * 24 : Math.round(width), height: snapToGrid ? Math.round(height / 24) * 24 : Math.round(height) });
+  }
+  function endNodeResize(event: React.PointerEvent<HTMLSpanElement>) {
+    if (!resizeRef.current) return;
+    resizeRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    persist();
+  }
   function startPan(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0 || (event.target as HTMLElement).closest('.project-canvas-node')) return;
+    setContextMenu(null);
     if (tool === 'brush') {
       const point = canvasPoint(event.clientX, event.clientY);
       const stroke: ProjectCanvasStroke = { id: crypto.randomUUID(), points: `${point.x},${point.y}`, ...brush };
@@ -232,6 +271,47 @@ function ProjectCanvas({ project, tasks, onSave, onBack, onDashboard }: { projec
   }
   function activateTool(next: CanvasTool, nextPanel: CanvasPanel = null) { setTool(next); setPanel(nextPanel); if (next !== 'connect') setConnectionStart(null); }
   async function toggleFullscreen() { if (!document.fullscreenElement) await shellRef.current?.requestFullscreen(); else await document.exitFullscreen(); }
+  function openContextMenu(event: React.MouseEvent<HTMLDivElement>) {
+    if ((event.target as HTMLElement).closest('.project-canvas-node,.canvas-context-menu,.canvas-floating-toolbar,.canvas-project-controls,.canvas-tool-panel')) return;
+    event.preventDefault();
+    const rect = viewportRef.current?.getBoundingClientRect(); if (!rect) return;
+    const point = canvasPoint(event.clientX, event.clientY);
+    setPanel(null);
+    setContextMenu({ ...point, left: Math.min(event.clientX - rect.left, rect.width - 236), top: Math.min(event.clientY - rect.top, rect.height - 410) });
+  }
+  function chooseContextUpload(kind: 'image' | 'file') {
+    if (!contextMenu) return;
+    pendingInsertRef.current = { x: contextMenu.x, y: contextMenu.y };
+    setContextMenu(null);
+    if (kind === 'image') imageInputRef.current?.click(); else fileInputRef.current?.click();
+  }
+
+  useEffect(() => {
+    function applySnapshot(value: CanvasSnapshot) {
+      nodesRef.current = value.nodes; connectionsRef.current = value.connections; strokesRef.current = value.strokes;
+      setNodes(value.nodes); setConnections(value.connections); setStrokes(value.strokes);
+      onSave(value.nodes, value.connections, value.strokes);
+    }
+    function keyboardUndo() {
+      const previous = historyRef.current.at(-1); if (!previous) return;
+      futureRef.current = [{ nodes: nodesRef.current.map(node => ({ ...node })), connections: connectionsRef.current.map(connection => ({ ...connection })), strokes: strokesRef.current.map(stroke => ({ ...stroke })) }, ...futureRef.current].slice(0, 50);
+      historyRef.current = historyRef.current.slice(0, -1); applySnapshot(previous);
+    }
+    function keyboardRedo() {
+      const next = futureRef.current[0]; if (!next) return;
+      historyRef.current = [...historyRef.current, { nodes: nodesRef.current.map(node => ({ ...node })), connections: connectionsRef.current.map(connection => ({ ...connection })), strokes: strokesRef.current.map(stroke => ({ ...stroke })) }].slice(-50);
+      futureRef.current = futureRef.current.slice(1); applySnapshot(next);
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input,textarea,select,[contenteditable="true"]')) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) keyboardRedo(); else keyboardUndo(); }
+      else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') { event.preventDefault(); keyboardRedo(); }
+      else if (event.key === 'Escape') setContextMenu(null);
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onSave]);
 
   return <section ref={shellRef} className={`project-canvas-shell is-fullpage tool-${tool}`}>
     <input ref={imageInputRef} className="canvas-hidden-input" type="file" accept="image/*" multiple onChange={event => void uploadFiles(event, 'image')} />
@@ -275,17 +355,35 @@ function ProjectCanvas({ project, tasks, onSave, onBack, onDashboard }: { projec
 
     {tool !== 'select' && <div className="canvas-mode-indicator"><span>{tool === 'connect' ? (connectionStart ? 'Agora escolha o segundo elemento' : 'Clique no primeiro elemento') : 'Pincel ativo: arraste para desenhar'}</span><button onClick={() => activateTool('select')}><X />Sair</button></div>}
 
-    <div ref={viewportRef} className={`project-canvas-viewport ${gridVisible ? '' : 'grid-hidden'}`} style={{ backgroundPosition: `${pan.x}px ${pan.y}px`, backgroundSize: `${24 * zoom}px ${24 * zoom}px` }} onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={handleWheel}>
+    <div ref={viewportRef} className={`project-canvas-viewport ${gridVisible ? '' : 'grid-hidden'}`} style={{ backgroundPosition: `${pan.x}px ${pan.y}px`, backgroundSize: `${24 * zoom}px ${24 * zoom}px` }} onContextMenu={openContextMenu} onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={handleWheel}>
       <div className="project-canvas-stage" style={{ transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})` }}>
         <svg className="project-canvas-vectors" width="12000" height="12000" viewBox="0 0 12000 12000">
           <g className="canvas-connections">{connections.map(connection => { const from = nodes.find(node => node.id === connection.from); const to = nodes.find(node => node.id === connection.to); if (!from || !to) return null; const a = nodeCenter(from); const b = nodeCenter(to); return <line key={connection.id} className="canvas-connection" x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={connection.color || '#8A8A90'} onDoubleClick={() => { remember(); updateConnections(connectionsRef.current.filter(item => item.id !== connection.id)); window.setTimeout(persist, 0); }} />; })}</g>
           <g className="canvas-strokes">{strokes.map(stroke => <polyline key={stroke.id} points={stroke.points} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeOpacity={stroke.opacity} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={stroke.style === 'dashed' ? `${stroke.width * 4} ${stroke.width * 2}` : stroke.style === 'dotted' ? `1 ${stroke.width * 2.2}` : undefined} />)}</g>
         </svg>
-        {nodes.map(node => <article className={`project-canvas-node node-${node.kind} ${connectionStart === node.id ? 'connection-source' : ''}`} style={{ transform: `translate(${node.x}px,${node.y}px)` }} key={node.id} onClick={() => connectNode(node)}>
+        {nodes.map(node => { const size = nodeSize(node); return <article className={`project-canvas-node node-${node.kind} ${connectionStart === node.id ? 'connection-source' : ''}`} style={{ transform: `translate(${node.x}px,${node.y}px)`, width: size.width, height: size.height }} key={node.id} onClick={() => connectNode(node)}>
           <header onPointerDown={event => startNodeDrag(event, node)} onPointerMove={moveNode} onPointerUp={endNodeDrag} onPointerCancel={endNodeDrag}><GripVertical /><span>{nodeLabel(node)}</span><button aria-label="Remover item" onClick={event => { event.stopPropagation(); removeNode(node.id); }}><Trash2 /></button></header>
           {node.kind === 'image' && node.assetDataUrl ? <div className="canvas-image-content"><img src={node.assetDataUrl} alt={node.title} /><input aria-label="Nome da imagem" value={node.title} onFocus={remember} onChange={event => editNode(node.id, { title: event.target.value })} onBlur={persist} /></div> : node.kind === 'file' ? <div className="canvas-file-content"><Paperclip /><div><input aria-label="Nome do arquivo" value={node.title} onFocus={remember} onChange={event => editNode(node.id, { title: event.target.value })} onBlur={persist} /><small>{node.content}</small></div>{node.assetDataUrl && <a href={node.assetDataUrl} download={node.fileName || node.title} aria-label="Baixar arquivo" onClick={event => event.stopPropagation()}><Download /></a>}</div> : node.kind === 'link' ? <div className="canvas-link-content"><Link2 /><div><input aria-label="Título do link" value={node.title} onFocus={remember} onChange={event => editNode(node.id, { title: event.target.value })} onBlur={persist} /><small>{node.content}</small></div><a href={node.url} target="_blank" rel="noreferrer" aria-label="Abrir link" onClick={event => event.stopPropagation()}><ExternalLink /></a></div> : node.kind === 'shape' ? <div className={`canvas-shape shape-${node.shapeType || 'rectangle'}`} style={{ '--shape-fill': node.fill || '#29292b', '--shape-stroke': node.stroke || '#e0e0e0' } as React.CSSProperties} /> : <><input aria-label="Título do cartão" value={node.title} onFocus={remember} onChange={event => editNode(node.id, { title: event.target.value })} onBlur={persist} /><textarea aria-label="Conteúdo do cartão" value={node.content} onFocus={remember} onChange={event => editNode(node.id, { content: event.target.value })} onBlur={persist} rows={3} /></>}
-        </article>)}
+          {(['n','ne','e','se','s','sw','w','nw'] as ResizeDirection[]).map(direction => <span aria-hidden="true" className={`canvas-resize-handle resize-${direction}`} key={direction} onPointerDown={event => startNodeResize(event, node, direction)} onPointerMove={moveNodeResize} onPointerUp={endNodeResize} onPointerCancel={endNodeResize} />)}
+        </article>; })}
       </div>
+      {contextMenu && <div className="canvas-context-menu" style={{ left: contextMenu.left, top: contextMenu.top }} onPointerDown={event => event.stopPropagation()} onContextMenu={event => event.preventDefault()}>
+        <strong>Adicionar ao canvas</strong>
+        <button onClick={() => addCard('note', contextMenu)}><StickyNote />Nota</button>
+        <button onClick={() => chooseContextUpload('image')}><ImagePlus />Imagem</button>
+        <button onClick={() => chooseContextUpload('file')}><Paperclip />Arquivo</button>
+        <button onClick={() => addLink(contextMenu)}><Link2 />Link</button>
+        <span className="canvas-context-separator" />
+        <button onClick={() => addShape('rectangle', contextMenu)}><Square />Retângulo</button>
+        <button onClick={() => addShape('ellipse', contextMenu)}><Circle />Círculo</button>
+        <button onClick={() => addShape('diamond', contextMenu)}><Diamond />Losango</button>
+        <button onClick={() => addShape('triangle', contextMenu)}><Triangle />Triângulo</button>
+        <span className="canvas-context-separator" />
+        <button onClick={() => { setContextMenu(null); activateTool('connect'); }}><Network />Conectar elementos</button>
+        <button onClick={() => { setContextMenu(null); activateTool('brush', 'brush'); }}><Brush />Pincel</button>
+        <button onClick={() => addCard('idea', contextMenu)}><Target />Ideia</button>
+        <button onClick={() => addCard('milestone', contextMenu)}><Flag />Marco</button>
+      </div>}
       <div className="project-canvas-hint"><Move />Arraste para navegar · Ctrl + rolagem para ampliar</div>
     </div>
   </section>;
@@ -296,9 +394,20 @@ function nodeLabel(node: ProjectCanvasNode) {
 }
 
 function nodeCenter(node: ProjectCanvasNode) {
-  const width = node.kind === 'overview' ? 310 : node.kind === 'shape' ? 220 : 270;
-  const height = node.kind === 'image' ? 230 : node.kind === 'shape' ? 210 : 155;
+  const { width, height } = nodeSize(node);
   return { x: node.x + width / 2, y: node.y + height / 2 };
+}
+
+function nodeSize(node: ProjectCanvasNode) {
+  const defaults = node.kind === 'overview' ? { width: 310, height: 155 } : node.kind === 'image' ? { width: 290, height: 230 } : node.kind === 'shape' ? { width: 220, height: 210 } : node.kind === 'file' || node.kind === 'link' ? { width: 270, height: 112 } : { width: 270, height: 155 };
+  return { width: node.width || defaults.width, height: node.height || defaults.height };
+}
+
+function minimumNodeSize(node: ProjectCanvasNode) {
+  if (node.kind === 'shape') return { width: 80, height: 80 };
+  if (node.kind === 'image') return { width: 150, height: 120 };
+  if (node.kind === 'file' || node.kind === 'link') return { width: 190, height: 92 };
+  return { width: 180, height: 110 };
 }
 
 function normalizeLink(value: string) {
