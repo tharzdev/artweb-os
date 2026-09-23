@@ -3,15 +3,18 @@ import { decryptScopedSecret, encryptScopedSecret } from '@/lib/ai';
 
 const scope='google_places';
 const endpoint='https://places.googleapis.com/v1/places:searchText';
-const fieldMask=['places.id','places.displayName','places.formattedAddress','places.nationalPhoneNumber','places.rating','places.userRatingCount','places.websiteUri','places.googleMapsUri','places.primaryTypeDisplayName','places.businessStatus'].join(',');
+const fieldMask=['places.id','places.displayName','places.formattedAddress','places.nationalPhoneNumber','places.rating','places.userRatingCount','places.websiteUri','places.googleMapsUri','places.primaryTypeDisplayName','places.businessStatus','nextPageToken'].join(',');
 
-export type ProspectingResult={id:string;name:string;category:string;address:string;phone:string;rating:number;reviewCount:number;mapsUrl:string;businessStatus:string;score:number};
+export type WebsitePresence='any'|'with'|'without';
+export type BusinessSize='any'|'local'|'small'|'medium'|'large';
+export type ProspectingCursor={queryIndex:number;pageToken?:string};
+export type ProspectingResult={id:string;name:string;category:string;address:string;phone:string;rating:number;reviewCount:number;websiteUrl:string;mapsUrl:string;businessStatus:string;size:Exclude<BusinessSize,'any'>;score:number};
 type GooglePlace={id?:string;displayName?:{text?:string};formattedAddress?:string;nationalPhoneNumber?:string;rating?:number;userRatingCount?:number;websiteUri?:string;googleMapsUri?:string;primaryTypeDisplayName?:{text?:string};businessStatus?:string};
 
 function placesError(status:number,detail:string){
-  if(status===400)return 'A pesquisa contém filtros inválidos.';
+  if(status===400)return 'A pesquisa contém filtros inválidos ou um token de página expirou.';
   if(status===401||status===403)return 'A chave foi recusada. Ative a Places API (New) e confira as restrições da chave.';
-  if(status===429)return 'O limite de consultas do Google Places foi atingido.';
+  if(status===429)return 'O limite de consultas do Google Places foi atingido. Aguarde ou revise sua cota.';
   if(status>=500)return 'O Google Places está temporariamente indisponível. Tente novamente.';
   try{const parsed=JSON.parse(detail) as {error?:{message?:string}};if(parsed.error?.message)return parsed.error.message.slice(0,220)}catch{}
   return `O Google Places respondeu com erro ${status}.`;
@@ -20,7 +23,7 @@ function placesError(status:number,detail:string){
 async function placesRequest(apiKey:string,body:Record<string,unknown>,fields=fieldMask){
   const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json','x-goog-api-key':apiKey,'x-goog-fieldmask':fields},body:JSON.stringify(body)});
   if(!response.ok){const detail=await response.text().catch(()=> '');throw new Error(placesError(response.status,detail))}
-  return response.json() as Promise<{places?:GooglePlace[]}>;
+  return response.json() as Promise<{places?:GooglePlace[];nextPageToken?:string}>;
 }
 
 export async function testPlacesKey(apiKey:string){
@@ -40,18 +43,29 @@ export async function placesCredential(ownerId:string){
   return {...row,apiKey:await decryptScopedSecret(row.ciphertext,row.iv,ownerId,scope)};
 }
 
+export function estimatedBusinessSize(reviewCount:number):Exclude<BusinessSize,'any'>{
+  if(reviewCount<50)return 'local';
+  if(reviewCount<200)return 'small';
+  if(reviewCount<1000)return 'medium';
+  return 'large';
+}
+
 function opportunityScore(place:GooglePlace){
-  let score=35;const rating=place.rating||0;const reviews=place.userRatingCount||0;
-  if(rating>=4.7)score+=20;else if(rating>=4.5)score+=14;else score+=8;
-  if(reviews>=100)score+=15;else if(reviews>=50)score+=12;else if(reviews>=20)score+=8;
-  if(place.nationalPhoneNumber)score+=10;if(place.formattedAddress)score+=8;
-  if(!/shopping|store|supermarket|department/i.test(place.primaryTypeDisplayName?.text||''))score+=7;
+  let score=20;const rating=place.rating||0;const reviews=place.userRatingCount||0;
+  if(rating>=4.7)score+=20;else if(rating>=4.5)score+=14;else if(rating>=4)score+=8;
+  if(reviews>=1000)score+=18;else if(reviews>=200)score+=16;else if(reviews>=50)score+=12;else if(reviews>=20)score+=8;
+  if(place.nationalPhoneNumber)score+=10;if(place.formattedAddress)score+=7;if(!place.websiteUri)score+=25;
   return Math.min(score,100);
 }
 
-export async function searchPlaces(input:{apiKey:string;category:string;location:string;minRating:number;minReviews:number;phoneOnly:boolean}){
-  const result=await placesRequest(input.apiKey,{textQuery:`${input.category} em ${input.location}`,pageSize:20,minRating:input.minRating,languageCode:'pt-BR',includePureServiceAreaBusinesses:true});
+export async function searchPlacesPage(input:{apiKey:string;category:string;location:string;minRating:number;minReviews:number;phoneOnly:boolean;websitePresence:WebsitePresence;businessSize:BusinessSize;operationalOnly:boolean;pageToken?:string}){
+  const request:Record<string,unknown>={textQuery:`${input.category} em ${input.location}`,pageSize:20,minRating:input.minRating,languageCode:'pt-BR',includePureServiceAreaBusinesses:true};
+  if(input.pageToken)request.pageToken=input.pageToken;
+  const result=await placesRequest(input.apiKey,request);
   const places=result.places||[];
-  const matches=places.filter(place=>!place.websiteUri&&(place.rating||0)>=input.minRating&&(place.userRatingCount||0)>=input.minReviews&&place.businessStatus!=='CLOSED_PERMANENTLY'&&(!input.phoneOnly||!!place.nationalPhoneNumber)).map(place=>({id:place.id||crypto.randomUUID(),name:place.displayName?.text||'Empresa sem nome',category:place.primaryTypeDisplayName?.text||input.category,address:place.formattedAddress||'',phone:place.nationalPhoneNumber||'',rating:place.rating||0,reviewCount:place.userRatingCount||0,mapsUrl:place.googleMapsUri||'',businessStatus:place.businessStatus||'OPERATIONAL',score:opportunityScore(place)} satisfies ProspectingResult)).sort((a,b)=>b.score-a.score||b.reviewCount-a.reviewCount);
-  return {analyzed:places.length,matches};
+  const matches=places.filter(place=>{
+    const website=!!place.websiteUri;const size=estimatedBusinessSize(place.userRatingCount||0);
+    return (place.rating||0)>=input.minRating&&(place.userRatingCount||0)>=input.minReviews&&(!input.operationalOnly||place.businessStatus==='OPERATIONAL')&&(!input.phoneOnly||!!place.nationalPhoneNumber)&&(input.websitePresence==='any'||(input.websitePresence==='with'?website:!website))&&(input.businessSize==='any'||input.businessSize===size);
+  }).map(place=>({id:place.id||crypto.randomUUID(),name:place.displayName?.text||'Empresa sem nome',category:place.primaryTypeDisplayName?.text||input.category,address:place.formattedAddress||'',phone:place.nationalPhoneNumber||'',rating:place.rating||0,reviewCount:place.userRatingCount||0,websiteUrl:place.websiteUri||'',mapsUrl:place.googleMapsUri||'',businessStatus:place.businessStatus||'OPERATIONAL',size:estimatedBusinessSize(place.userRatingCount||0),score:opportunityScore(place)} satisfies ProspectingResult)).sort((a,b)=>b.score-a.score||b.reviewCount-a.reviewCount);
+  return {analyzed:places.length,matches,nextPageToken:result.nextPageToken||''};
 }
