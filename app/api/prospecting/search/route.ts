@@ -1,4 +1,4 @@
-import { env } from 'cloudflare:workers';
+import { db } from '@/lib/database';
 import { NextResponse } from 'next/server';
 import { currentUser } from '@/lib/auth';
 import { placesCredential, searchPlacesPage, type BusinessSize, type ProspectingCursor, type ProspectingResult, type WebsitePresence } from '@/lib/prospecting';
@@ -21,14 +21,14 @@ function cursorFrom(value:unknown,total:number):ProspectingCursor{
 }
 
 export async function GET(request:Request){
-  if(!env.DB)return NextResponse.json({error:'Armazenamento indisponível.'},{status:503});
+  if(!db.available)return NextResponse.json({error:'Armazenamento indisponível.'},{status:503});
   const user=await currentUser(request);if(!user)return NextResponse.json({error:'Sessão necessária.'},{status:401});
-  const rows=await env.DB.prepare('SELECT id, category, location, min_rating AS minRating, min_reviews AS minReviews, result_count AS resultCount, created_at AS createdAt FROM prospecting_searches WHERE owner_id = ? ORDER BY created_at DESC LIMIT 8').bind(user.id).all();
+  const rows=await db.prepare('SELECT id, category, location, min_rating AS "minRating", min_reviews AS "minReviews", result_count AS "resultCount", created_at AS "createdAt" FROM prospecting_searches WHERE owner_id = ? ORDER BY created_at DESC LIMIT 8').bind(user.id).all();
   return NextResponse.json({searches:rows.results});
 }
 
 export async function POST(request:Request){
-  if(!env.DB)return NextResponse.json({error:'Armazenamento indisponível.'},{status:503});
+  if(!db.available)return NextResponse.json({error:'Armazenamento indisponível.'},{status:503});
   const user=await currentUser(request);if(!user)return NextResponse.json({error:'Sessão necessária.'},{status:401});
   const body=await request.json().catch(()=>null) as SearchBody|null;
   const categories=list(body?.categories,body?.category,25);const locations=list(body?.locations,body?.location,25);
@@ -40,13 +40,13 @@ export async function POST(request:Request){
   const combinations=categories.flatMap(category=>locations.map(location=>({category,location})));
   let searchId=typeof body?.searchId==='string'&&body.searchId.length<=80?body.searchId:'';
   if(searchId){
-    const owned=await env.DB.prepare('SELECT id FROM prospecting_searches WHERE id = ? AND owner_id = ?').bind(searchId,user.id).first();
+    const owned=await db.prepare('SELECT id FROM prospecting_searches WHERE id = ? AND owner_id = ?').bind(searchId,user.id).first();
     if(!owned)return NextResponse.json({error:'Esta sessão de busca não é válida.'},{status:400});
   }else{
-    const since=new Date(Date.now()-60_000).toISOString();const recent=await env.DB.prepare('SELECT COUNT(*) AS total FROM prospecting_searches WHERE owner_id = ? AND created_at >= ?').bind(user.id,since).first<{total:number}>();
+    const since=new Date(Date.now()-60_000).toISOString();const recent=await db.prepare('SELECT COUNT(*) AS total FROM prospecting_searches WHERE owner_id = ? AND created_at >= ?').bind(user.id,since).first<{total:number}>();
     if((recent?.total||0)>=4)return NextResponse.json({error:'Muitas buscas novas em pouco tempo. Aguarde um minuto ou continue uma busca em andamento.'},{status:429});
     searchId=crypto.randomUUID();const now=new Date().toISOString();
-    await env.DB.prepare('INSERT INTO prospecting_searches (id, owner_id, category, location, min_rating, min_reviews, result_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(searchId,user.id,categories.join(' · '),locations.join(' · '),minRating,minReviews,0,now).run();
+    await db.prepare('INSERT INTO prospecting_searches (id, owner_id, category, location, min_rating, min_reviews, result_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(searchId,user.id,categories.join(' · '),locations.join(' · '),minRating,minReviews,0,now).run();
   }
   const credential=await placesCredential(user.id);if(!credential)return NextResponse.json({error:'Configure a chave do Google Places antes de pesquisar.'},{status:400});
   let cursor=cursorFrom(body?.cursor,combinations.length);let analyzed=0;const matches:ProspectingResult[]=[];
@@ -58,7 +58,7 @@ export async function POST(request:Request){
       cursor=page.nextPageToken?{queryIndex:cursor.queryIndex,pageToken:page.nextPageToken}:{queryIndex:cursor.queryIndex+1};
     }
     const unique=[...new Map(matches.map(item=>[item.id,item])).values()];
-    await env.DB.prepare('UPDATE prospecting_searches SET result_count = result_count + ? WHERE id = ? AND owner_id = ?').bind(unique.length,searchId,user.id).run();
+    await db.prepare('UPDATE prospecting_searches SET result_count = result_count + ? WHERE id = ? AND owner_id = ?').bind(unique.length,searchId,user.id).run();
     const exhausted=cursor.queryIndex>=combinations.length;
     return NextResponse.json({matches:unique,analyzed,searchId,nextCursor:exhausted?null:cursor,exhausted,queryProgress:{current:Math.min(cursor.queryIndex+1,combinations.length),total:combinations.length},filters:{categories,locations,minRating,minReviews,phoneOnly,websitePresence,businessSize,operationalOnly}});
   }catch(error){return NextResponse.json({error:error instanceof Error?error.message:'Não foi possível concluir este lote da busca.',searchId},{status:502})}

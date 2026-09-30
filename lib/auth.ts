@@ -1,4 +1,4 @@
-import { env } from 'cloudflare:workers';
+import { db } from '@/lib/database';
 
 export const SESSION_COOKIE = 'artweb_session';
 const SESSION_DAYS = 30;
@@ -21,7 +21,7 @@ function randomToken(size = 32) {
 
 async function derivePassword(password: string, salt: Uint8Array) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' }, key, 256);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new Uint8Array(salt), iterations: 100_000, hash: 'SHA-256' }, key, 256);
   return new Uint8Array(bits);
 }
 
@@ -50,15 +50,15 @@ export async function createSession(userId: string) {
   const id = await tokenHash(token);
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + SESSION_DAYS * 86400_000);
-  await env.DB.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(createdAt.toISOString()).run();
-  await env.DB.prepare('INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
+  await db.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(createdAt.toISOString()).run();
+  await db.prepare('INSERT INTO sessions (id, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
     .bind(id, userId, expiresAt.toISOString(), createdAt.toISOString()).run();
   return { token, maxAge: SESSION_DAYS * 86400 };
 }
 
 export async function deleteSession(token: string | null) {
-  if (!token || !env.DB) return;
-  await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(await tokenHash(token)).run();
+  if (!token || !db.available) return;
+  await db.prepare('DELETE FROM sessions WHERE id = ?').bind(await tokenHash(token)).run();
 }
 
 function cookieValue(request: Request, name: string) {
@@ -73,12 +73,12 @@ function cookieValue(request: Request, name: string) {
 export type AuthUser = { id: string; name: string; email: string };
 
 export async function currentUser(request: Request): Promise<AuthUser | null> {
-  if (!env.DB) return null;
+  if (!db.available) return null;
   const token = cookieValue(request, SESSION_COOKIE);
   if (!token) return null;
   const id = await tokenHash(token);
   const now = new Date().toISOString();
-  return env.DB.prepare(`SELECT users.id, users.name, users.email
+  return db.prepare(`SELECT users.id, users.name, users.email
     FROM sessions JOIN users ON users.id = sessions.user_id
     WHERE sessions.id = ? AND sessions.expires_at > ?`).bind(id, now).first<AuthUser>();
 }

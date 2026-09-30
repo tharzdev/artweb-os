@@ -1,4 +1,4 @@
-import { env } from 'cloudflare:workers';
+import { db } from '@/lib/database';
 import { decryptScopedSecret, encryptScopedSecret } from '@/lib/ai';
 
 const scope='google_places';
@@ -31,14 +31,14 @@ export async function testPlacesKey(apiKey:string){
 }
 
 export async function savePlacesKey(ownerId:string,apiKey:string){
-  if(!env.DB)throw new Error('Armazenamento indisponível.');
+  if(!db.available)throw new Error('Armazenamento indisponível.');
   const encrypted=await encryptScopedSecret(apiKey,ownerId,scope);const now=new Date().toISOString();
-  await env.DB.prepare(`INSERT INTO prospecting_credentials (owner_id, ciphertext, iv, last_four, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(owner_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, last_four = excluded.last_four, updated_at = excluded.updated_at`).bind(ownerId,encrypted.ciphertext,encrypted.iv,apiKey.slice(-4),now,now).run();
+  await db.prepare(`INSERT INTO prospecting_credentials (owner_id, ciphertext, iv, last_four, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(owner_id) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, last_four = excluded.last_four, updated_at = excluded.updated_at`).bind(ownerId,encrypted.ciphertext,encrypted.iv,apiKey.slice(-4),now,now).run();
 }
 
 export async function placesCredential(ownerId:string){
-  if(!env.DB)return null;
-  const row=await env.DB.prepare('SELECT ciphertext, iv, last_four AS lastFour, updated_at AS updatedAt FROM prospecting_credentials WHERE owner_id = ?').bind(ownerId).first<{ciphertext:string;iv:string;lastFour:string;updatedAt:string}>();
+  if(!db.available)return null;
+  const row=await db.prepare('SELECT ciphertext, iv, last_four AS "lastFour", updated_at AS "updatedAt" FROM prospecting_credentials WHERE owner_id = ?').bind(ownerId).first<{ciphertext:string;iv:string;lastFour:string;updatedAt:string}>();
   if(!row)return null;
   return {...row,apiKey:await decryptScopedSecret(row.ciphertext,row.iv,ownerId,scope)};
 }

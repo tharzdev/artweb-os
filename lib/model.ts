@@ -24,7 +24,7 @@ export const emptyData:Data={version:2,projects:[],tasks:[],events:[],notes:[],l
 
 function normalizeAccent(value?:string){
   const normalized=value?.toUpperCase();
-  return monochromeAccents.includes(normalized as typeof monochromeAccents[number])?normalized:defaultPreferences.accent;
+  return monochromeAccents.includes(normalized as typeof monochromeAccents[number])?normalized!:defaultPreferences.accent;
 }
 
 function normalizeProjectColor(value?:string){

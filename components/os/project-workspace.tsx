@@ -45,7 +45,7 @@ export function ProjectDetailView({ data, project, onBack, onCommit, onOpenTask,
         <button className="project-new-task" onClick={onNewTask}><Plus />Nova tarefa</button>
         <div className="project-view-switch" aria-label="Visualização do projeto">
           <button className={mode === 'dashboard' ? 'active' : ''} onClick={() => setMode('dashboard')}><LayoutDashboard />Dashboard</button>
-          <button className={mode === 'canvas' ? 'active' : ''} onClick={() => setMode('canvas')}><Maximize2 />Canvas</button>
+          <button onClick={() => setMode('canvas')}><Maximize2 />Canvas</button>
         </div>
       </div>
     </header>}
@@ -340,7 +340,7 @@ function ProjectCanvas({ project, tasks, onSave, onBack, onDashboard }: { projec
         <button onClick={() => addCard('note')}><StickyNote /><span>Nota<small>Texto e decisões</small></span></button>
         <button onClick={() => imageInputRef.current?.click()}><ImagePlus /><span>Imagem<small>PNG, JPG, GIF ou WebP</small></span></button>
         <button onClick={() => fileInputRef.current?.click()}><Paperclip /><span>Arquivo<small>Anexar e baixar</small></span></button>
-        <button onClick={addLink}><Link2 /><span>Link<small>Endereço externo</small></span></button>
+        <button onClick={() => addLink()}><Link2 /><span>Link<small>Endereço externo</small></span></button>
         <button onClick={() => setPanel('shape')}><Shapes /><span>Forma<small>Quatro formatos</small></span></button>
         <button onClick={() => activateTool('connect')}><Network /><span>Conectar<small>Una dois elementos</small></span></button>
         <button onClick={() => activateTool('brush', 'brush')}><Brush /><span>Pincel<small>Desenho livre</small></span></button>

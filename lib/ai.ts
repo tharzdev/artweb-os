@@ -1,4 +1,4 @@
-import { env } from 'cloudflare:workers';
+import { db } from '@/lib/database';
 import type { Data } from '@/lib/model';
 
 export type AIProvider='openai'|'gemini'|'anthropic'|'compatible';
@@ -17,8 +17,8 @@ function bytesToBase64(bytes:Uint8Array){let value='';for(const byte of bytes)va
 function base64ToBytes(value:string){const binary=atob(value);return Uint8Array.from(binary,char=>char.charCodeAt(0))}
 
 async function encryptionKey(){
-  if(!env.AI_CREDENTIAL_KEY)throw new Error('A proteção de chaves ainda não foi configurada no servidor.');
-  const raw=base64ToBytes(env.AI_CREDENTIAL_KEY);
+  if(!process.env.AI_CREDENTIAL_KEY)throw new Error('A proteção de chaves ainda não foi configurada no servidor.');
+  const raw=base64ToBytes(process.env.AI_CREDENTIAL_KEY);
   if(raw.byteLength!==32)throw new Error('A proteção de chaves do servidor é inválida.');
   return crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']);
 }
@@ -48,14 +48,14 @@ export async function decryptApiKey(ciphertext:string,iv:string,ownerId:string,p
 function validProvider(value:string):value is AIProvider{return value in providerDefaults}
 
 export async function listCredentials(ownerId:string):Promise<CredentialMetadata[]>{
-  if(!env.DB)return[];
-  const rows=await env.DB.prepare('SELECT provider, model, endpoint, last_four AS lastFour, updated_at AS updatedAt FROM ai_credentials WHERE owner_id = ? ORDER BY updated_at DESC').bind(ownerId).all<CredentialMetadata>();
+  if(!db.available)return[];
+  const rows=await db.prepare('SELECT provider, model, endpoint, last_four AS "lastFour", updated_at AS "updatedAt" FROM ai_credentials WHERE owner_id = ? ORDER BY updated_at DESC').bind(ownerId).all<CredentialMetadata>();
   return rows.results.filter(item=>validProvider(item.provider));
 }
 
 export async function credentialFor(ownerId:string,provider:string){
-  if(!env.DB||!validProvider(provider))return null;
-  const row=await env.DB.prepare('SELECT provider, model, endpoint, ciphertext, iv FROM ai_credentials WHERE owner_id = ? AND provider = ?').bind(ownerId,provider).first<{provider:AIProvider;model:string;endpoint:string;ciphertext:string;iv:string}>();
+  if(!db.available||!validProvider(provider))return null;
+  const row=await db.prepare('SELECT provider, model, endpoint, ciphertext, iv FROM ai_credentials WHERE owner_id = ? AND provider = ?').bind(ownerId,provider).first<{provider:AIProvider;model:string;endpoint:string;ciphertext:string;iv:string}>();
   if(!row)return null;
   return {...row,apiKey:await decryptApiKey(row.ciphertext,row.iv,ownerId,row.provider)};
 }
