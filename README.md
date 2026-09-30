@@ -4,7 +4,7 @@ O **ArtWeb OS** é um workspace criativo para organizar clientes, projetos, tare
 
 ## Acessar o aplicativo
 
-[Abrir o ArtWeb OS](https://artweb-workspace.arthurrodriguescom77.chatgpt.site/)
+[Abrir o ArtWeb OS](https://artweb-os.vercel.app/)
 
 ## Recursos principais
 
@@ -43,17 +43,28 @@ O GitHub também oferece o código-fonte compactado:
 ```bash
 git clone https://github.com/tharzdev/artweb-os.git
 cd artweb-os
-npm run install:ci
+npm ci
+Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Abra o endereço informado no terminal para acessar o ambiente local.
+Preencha `DATABASE_URL` e `AI_CREDENTIAL_KEY` no arquivo `.env.local` antes de iniciar. Abra o endereço informado no terminal para acessar o ambiente local.
 
 ## Configuração de serviços externos
+
+O banco de dados usa PostgreSQL no Supabase. Crie um projeto, copie a URL do Transaction Pooler para `DATABASE_URL` e aplique as migrações versionadas em `supabase/migrations`:
+
+```bash
+npx supabase login
+npx supabase link --project-ref SEU_PROJECT_REF
+npx supabase db push
+```
 
 As integrações com Google Places e provedores de IA usam chaves fornecidas pelo próprio usuário dentro do aplicativo. As chaves não fazem parte do código-fonte.
 
 Em produção, configure `AI_CREDENTIAL_KEY` como um segredo do servidor contendo exatamente 32 bytes codificados em Base64. Nunca publique esse valor em arquivos `.env`, commits ou capturas de tela.
+
+Na Vercel, adicione `DATABASE_URL` e `AI_CREDENTIAL_KEY` em **Project Settings > Environment Variables** antes de publicar. O repositório já está preparado para o preset Next.js.
 
 ## Segurança
 
@@ -68,10 +79,11 @@ Consulte [SECURITY.md](SECURITY.md) para relatar uma vulnerabilidade de forma re
 ## Tecnologias
 
 - React 19;
-- Next.js 16 e Vinext;
+- Next.js 16;
 - TypeScript;
-- Cloudflare Workers e D1;
-- Drizzle ORM;
+- Vercel;
+- Supabase Postgres;
+- Postgres.js;
 - Tailwind CSS e componentes Radix/shadcn.
 
 ## Status
